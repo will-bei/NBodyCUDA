@@ -5,6 +5,9 @@
 #include <ctime>
 #include "HelperFunctions.h"
 
+const unsigned int SEED_VALUE = 2024;
+const bool DRY_RUN = false;
+
 //semi-randomly initialize the MassObjects given the field size and the number of objects
 //all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
 //40% of the objects will be initialized in a central 2.5*10^10 by 2.5*10^10 field
@@ -34,14 +37,14 @@ void init(int px, int pz, int numberOfObjects, MassObject* arr) {
 }
 
 int main() {
-	srand(time(0));
+	srand(SEED_VALUE);
 	int px;
 	int pz;
 	int numberOfObjects;
 	float stepsize = 25;
 	px = 800;
 	pz = 800;
-	numberOfObjects = 300;
+	numberOfObjects = 256;
 	std::cout << "The frame width is " << px << "." << std::endl;
 	std::cout << "The frame height is " << pz << "." << std::endl;
 	std::cout << "The number of objects used is " << numberOfObjects << "." << std::endl;
@@ -93,20 +96,21 @@ int main() {
 	end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed_time = end - start;
 
-	std::cout << "Simulation completed in " << elapsed_time.count() << " ms\n";
+	std::cout << "Simulation completed in " << elapsed_time.count() << " s\n";
 
-	// draw frames
-
-	for (int i = 0; i < NUMBEROFCYCLES; i++) {
-		fill_background(buffer, px, pz, BACKGROUND_COLOR);
-		for (int j = 0; j < remainingObjs[i]; j++) {
-			struct r_circle thisObject;
-			set_circle_values(thisObject, allArrs[i][j], px, pz);
-			fill_circle(buffer, px, pz, thisObject);
-		}
-		//create a frame for every other cycle
-		if (i % 2 == 0) {
-			write_bmp_file(i / 2, buffer, px, pz);
+	// draw frames if not a dry run
+	if (!DRY_RUN) {
+		for (int i = 0; i < NUMBEROFCYCLES; i++) {
+			fill_background(buffer, px, pz, BACKGROUND_COLOR);
+			for (int j = 0; j < remainingObjs[i]; j++) {
+				struct r_circle thisObject;
+				set_circle_values(thisObject, allArrs[i][j], px, pz);
+				fill_circle(buffer, px, pz, thisObject);
+			}
+			//create a frame for every other cycle
+			if (i % 2 == 0) {
+				write_bmp_file(i / 2, buffer, px, pz);
+			}
 		}
 	}
 
