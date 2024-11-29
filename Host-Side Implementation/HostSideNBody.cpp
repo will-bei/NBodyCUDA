@@ -4,6 +4,7 @@
 #include <sstream>
 #include <fstream>
 #include <iomanip>
+#include <chrono>
 #include <cmath>
 #include <ctime>
 
@@ -14,6 +15,7 @@ struct p_color
 	unsigned char g; //green, 0 to 255
 	unsigned char b; //blue, 0 to 255
 };
+
 //struct for circle
 struct r_circle
 {
@@ -23,12 +25,10 @@ struct r_circle
 	struct p_color circle_color; //color of the circle
 };
 
-using namespace std;
-
 //gravitational constant
 const double GRAV_CONST = 6.67 / pow(10, 11);
 //number of cycles done for the simulation
-const int NUMBEROFCYCLES = 4000;
+const int NUMBEROFCYCLES = 1000;
 //simulation field size
 const double FIELDX = 4 * pow(10, 10);
 const double FIELDY = 4 * pow(10, 10);
@@ -125,22 +125,22 @@ void MassObject::changeV(double vx_new, double vy_new) {
 void MassObject::changePosition(double stepsize) {
 	vx += ax * stepsize;
 	vy += ay * stepsize;
-	//due to small stepsize, 0.5*a*t*t is negigible
-	x += stepsize * vx;
-	y += stepsize * vy;
+	
+	x += 0.5 * ax * stepsize * stepsize + stepsize * vx;
+	y += 0.5 * ay * stepsize * stepsize + stepsize * vy;
 }
 
 //converts int to a five digit string
-string int_to_five_digit_string(int frame_number)
+std::string int_to_five_digit_string(int frame_number)
 {
-	ostringstream strm;
-	strm << setfill('0') << setw(5) << frame_number;
+	std::ostringstream strm;
+	strm << std::setfill('0') << std::setw(5) << frame_number;
 	return strm.str();
 }
 //converts string to int
-int string_to_int(string s)
+int string_to_int(std::string s)
 {
-	istringstream strm;
+	std::istringstream strm;
 	strm.str(s);
 	int n = 0;
 	strm >> n;
@@ -148,8 +148,7 @@ int string_to_int(string s)
 }
 
 //write a bmp header file
-//method recycled from animation_project
-void write_bmp_header_file(ofstream& output_file, int px, int pz)
+void write_bmp_header_file(std::ofstream& output_file, int px, int pz)
 {
 	unsigned short int bfType;
 	bfType = 0x4D42;
@@ -233,19 +232,17 @@ void write_bmp_header_file(ofstream& output_file, int px, int pz)
 }
 
 //write a bmp file
-//method recycled from animation_project
-void write_bmp_file(int f_number, string output_file_name, unsigned char*** output_buffer, int px, int pz)
+void write_bmp_file(int f_number, unsigned char*** output_buffer, int px, int pz)
 {
-	ofstream ostrm_1;
-	//string o_file_name = int_to_five_digit_string(f_number)+output_file_name;
-	string o_file_name = int_to_five_digit_string(f_number) + ".bmp";
-	ostrm_1.open(o_file_name.c_str(), ios::out | ios::binary);
+	std::ofstream ostrm_1;
+	std::string o_file_name = int_to_five_digit_string(f_number) + ".bmp";
+	ostrm_1.open(o_file_name.c_str(), std::ios::out | std::ios::binary);
 	if (ostrm_1.fail())
 	{
-		cout << "Error.  Can't open output file " << o_file_name << "." << endl;
+		std::cout << "Error.  Can't open output file " << o_file_name << "." << std::endl;
 		return;
 	}
-	cout << "Opening output file " << o_file_name << "." << endl;
+	std::cout << "Opening output file " << o_file_name << "." << std::endl;
 
 	int rem;
 	rem = 3 * px % 4;
@@ -289,7 +286,6 @@ void write_bmp_file(int f_number, string output_file_name, unsigned char*** outp
 }
 
 //fills the background of the frame
-//method recycled from animation_project
 void fill_background(unsigned char*** o_buffer, int px, int pz, p_color bg_color)
 {
 	int i;
@@ -306,7 +302,6 @@ void fill_background(unsigned char*** o_buffer, int px, int pz, p_color bg_color
 }
 
 //draws a circle (representative of a MassObject)
-//method recycled from animation_project
 void fill_circle(unsigned char*** o_buffer, int px, int pz, r_circle s_circle)
 {
 	//cout << s_circle.radius << ": ";
@@ -392,6 +387,7 @@ bool isInRange(MassObject A, MassObject B, int px, int pz) {
 
 	return (result);
 }
+
 //given object A and object B that are colliding in a perfectly
 //inelastic collision, finds the resulting object and velocity and
 //stores the values in object A
@@ -415,38 +411,33 @@ MassObject* updateObjects(MassObject* A, MassObject* B) {
 }
 //moves an object in the MassObject* A array to the back
 //of the array, given the object's position in the array
-void shiftObjects(MassObject* A, int position, int size) {
+
+void swapObjects(MassObject* A, int position, int size) {
 	MassObject temp = *(A + position);
 	for (int k = position; k < size - 1; k++) {
 		*(A + k) = *(A + k + 1);
 	}
 	*(A + size - 1) = temp;
 }
+
 //check to see if any collisions occured in an array of MassObjects
-//If collision occurs, the larger of the two absorbs the smaller and conservation
-//of momentum is applied.
-//The smaller object of the array is moved to the back of the array and size is
-//reduced by one.
-//Assumption: array is sorted in order of largest mass to smallest mass
 int check_collisions(MassObject* A, int size, int px, int pz) {
 	for (int i = 0; i < size; i++) {
 		for (int j = i + 1; j < size; j++) {
 			MassObject* object1 = (A + i);
 			MassObject* object2 = (A + j);
 			if (isInRange(*object1, *object2, px, pz)) {
-				//(m1*vx1+m2*vx2)/(m1+m2)
-				cout << "Collision! ";
-				cout << "Objects " << object1->getObjNumber() << " & " << object2->getObjNumber() << endl;
+				// (m1*vx1+m2*vx2)/(m1+m2)
 				object1 = updateObjects(object1, object2);
 				//swap smaller object with last object, and shorten array
-				shiftObjects(A, j, size);
-				//cout << object1->getMass() << endl;
+				swapObjects(A, j, size);
 				size--;
 			}
 		}
 	}
 	return size;
 }
+
 //find the dx between two objects
 double find_dx(MassObject A, MassObject B) {
 	return (B.getPosition_x() - A.getPosition_x());
@@ -498,7 +489,6 @@ void calculateAccelerations(MassObject* A, int size) {
 		}
 	}
 }
-
 //generate a random decimal between fMin and fMax
 double randDouble(double fMin, double fMax) {
 	double f = ((double)rand() / (RAND_MAX));
@@ -513,8 +503,7 @@ double randDouble(double fMin, double fMax) {
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
 //all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
-//40% of the objects will be initialized in a 2.5*10^10 by 2.5*10^10 field
-//	centered in the middle of the frame
+//40% of the objects will be initialized in a central 2.5*10^10 by 2.5*10^10 field
 //The remaining 60% can spawn anywhere in the frame's field
 void init(int px, int pz, int numberOfObjects, MassObject* arr) {
 	int benchmark1 = numberOfObjects * 4 / 10;
@@ -539,60 +528,9 @@ void init(int px, int pz, int numberOfObjects, MassObject* arr) {
 		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
 	}
 }
-//test init used for debugging
-void init2(int px, int pz, int numberOfObjects, MassObject* arr) {
-	int benchmark1 = numberOfObjects * 4 / 10;
-	int benchmark2 = numberOfObjects * 7 / 10;
-	for (int i = 0; i < benchmark1; i++) {
-		double x = (1.1 + randDouble(0, 1.8)) * pow(10, 10);
-		double y = (1.1 + randDouble(0, 1.8)) * pow(10, 10);
-		double vx = rand() % (500) - 250;
-		vx *= pow(10, 3);
-		double vy = rand() % (500) - 250;
-		vy *= pow(10, 3);
-		double mass = (rand() % 100 + 1) * pow(10, 22);
-		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
-	}
-	for (int i = benchmark1; i < benchmark2; i++) {
-		double x = (0.5 + randDouble(0, 3)) * pow(10, 10);
-		double y = (0.5 + randDouble(0, 3)) * pow(10, 10);
-		double vx = rand() % (500) - 250;
-		vx *= pow(10, 4);
-		double vy = rand() % (500) - 250;
-		vy *= pow(10, 4);
-		double mass = (rand() % 100 + 1) * pow(10, 22);
-		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
-	}
-	for (int i = benchmark2; i < numberOfObjects; i++) {
-		double x = (randDouble(0, 4)) * pow(10, 10);
-		double y = (randDouble(0, 4)) * pow(10, 10);
-		double vx = rand() % (500) - 250;
-		vx *= pow(10, 4);
-		double vy = rand() % (500) - 250;
-		vy *= pow(10, 4);
-		double mass = (rand() % 100 + 1) * pow(10, 22);
-		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
-	}
-}
-bool validate_input(int px, int pz, int numberOfObjects) {
-	if (px <= 0)
-	{
-		return false;
-	}
-	if (pz <= 0)
-	{
-		return false;
-	}
-	if (numberOfObjects <= 1)
-	{
-		return false;
-	}
-	return true;
-}
-int main() {
 
+int main() {
 	srand(time(0));
-	string arg_1 = "animation_project.bmp";
 	int px;
 	int pz;
 	int numberOfObjects;
@@ -600,12 +538,9 @@ int main() {
 	px = 800;
 	pz = 800;
 	numberOfObjects = 300;
-	cout << "The frame width is " << px << "." << endl;
-	cout << "The frame height is " << pz << "." << endl;
-	cout << "The number of objects used is " << numberOfObjects << "." << endl;
-
-	//test if input is valid; if invalid, program stops
-	if (!validate_input) { return -1; }
+	std::cout << "The frame width is " << px << "." << std::endl;
+	std::cout << "The frame height is " << pz << "." << std::endl;
+	std::cout << "The number of objects used is " << numberOfObjects << "." << std::endl;
 
 	//initialize output buffer
 	unsigned char*** buffer = new unsigned char** [pz];
@@ -618,56 +553,61 @@ int main() {
 			buffer[i][j] = new unsigned char[3];
 		}
 	}
-	cout << "Buffer initialized." << endl;
+	std::cout << "Buffer initialized." << std::endl;
 
 	//initialize objects
-	MassObject* arr = new MassObject[numberOfObjects];
-	init(px, pz, numberOfObjects, arr);
+	MassObject** allArrs = new MassObject * [NUMBEROFCYCLES];
+	allArrs[0] = new MassObject[numberOfObjects];
+	int* remainingObjs = new int[NUMBEROFCYCLES];
+	init(px, pz, numberOfObjects, allArrs[0]);
 
-	//define background color
+	std::cout << "MassObjects initialized" << std::endl;
+	std::cout << "Beginning simulation... " << std::endl;
+	std::chrono::time_point<std::chrono::system_clock> start, end;
+
+	// perform simulations
+	start = std::chrono::system_clock::now();
+	remainingObjs[0] = numberOfObjects;
+	for (int i = 1; i < NUMBEROFCYCLES; i++) {
+		// init current iteration
+		allArrs[i] = new MassObject[remainingObjs[i - 1]];
+		for (int j = 0; j < remainingObjs[i - 1]; j++) {
+			allArrs[i][j] = allArrs[i - 1][j];
+		}
+
+		//update the accelerations of the objects
+		calculateAccelerations(allArrs[i], remainingObjs[i - 1]);
+
+		//update each objects position
+		for (int j = 0; j < remainingObjs[i - 1]; j++) {
+			(allArrs[i][j]).changePosition(stepsize);
+		}
+		
+		//check if any objects have collided
+		remainingObjs[i] = check_collisions(allArrs[i], remainingObjs[i - 1], px, pz);
+	}
+	end = std::chrono::system_clock::now();
+	std::chrono::duration<double> elapsed_time = end - start;
+
+	std::cout << "Simulation completed in " << elapsed_time.count() << " ms\n";
+
+	// draw frames
+	// define background color
 	p_color b_color;
 	b_color.r = 0;
 	b_color.g = 0;
 	b_color.b = 5;
 
-	//draw frames
-
-	//draw frame 0:
-	fill_background(buffer, px, pz, b_color);
-	for (int j = 0; j < numberOfObjects; j++) {
-		struct r_circle thisObject;
-		set_circle_values(thisObject, *(arr + j), px, pz);
-		//cout << thisObject.cx << "  " << thisObject.cy << "  " << thisObject.radius << endl;
-		fill_circle(buffer, px, pz, thisObject);
-	}
-	write_bmp_file(0, arg_1, buffer, px, pz);
-
-	//draw the rest of the frames
-	int size = numberOfObjects;
-	for (int i = 1; i < NUMBEROFCYCLES; i++) {
-		//sort the MassObject array
-		sort_MassObjects(arr, 0, size);
-		//check if any objects have collided
-		size = check_collisions(arr, size, px, pz);
-
-		//draw the objects
+	for (int i = 0; i < NUMBEROFCYCLES; i++) {
 		fill_background(buffer, px, pz, b_color);
-		for (int j = 0; j < size; j++) {
+		for (int j = 0; j < remainingObjs[i]; j++) {
 			struct r_circle thisObject;
-			set_circle_values(thisObject, *(arr + j), px, pz);
+			set_circle_values(thisObject, allArrs[i][j], px, pz);
 			fill_circle(buffer, px, pz, thisObject);
 		}
 		//create a frame for every other cycle
 		if (i % 2 == 0) {
-			write_bmp_file(i / 2, arg_1, buffer, px, pz);
-		}
-		//check if any collisions have happened
-		size = check_collisions(arr, size, px, pz);
-		//update the accelerations of the objects
-		calculateAccelerations(arr, size);
-		//update each objects position
-		for (int j = 0; j < size; j++) {
-			(*(arr + j)).changePosition(stepsize);
+			write_bmp_file(i / 2, buffer, px, pz);
 		}
 	}
 
