@@ -5,9 +5,7 @@
 #include <sstream>
 #include <fstream>
 #include <iomanip>
-#include <chrono>
 #include <cmath>
-#include <ctime>
 
 //struct for color
 struct p_color
@@ -22,17 +20,15 @@ struct r_circle
 {
 	float cx; //x-coordinate of center of circle
 	float cy; //y-coordinate of center of circle
-	float radius; //radius of the circle
+	int radius; //pixel radius of the circle
 	struct p_color circle_color; //color of the circle
 };
 
 //gravitational constant
-const float GRAV_CONST = 6.67 / pow(10, 11);
-//number of cycles done for the simulation
-const int NUMBEROFCYCLES = 1000;
+const float GRAV_CONST = 6.67 / (float)pow(10, 11);
 //simulation field size
-const float FIELDX = 4 * pow(10, 10);
-const float FIELDY = 4 * pow(10, 10);
+const float FIELDX = 4 * (float)pow(10, 10);
+const float FIELDY = 4 * (float)pow(10, 10);
 const p_color BACKGROUND_COLOR = {
 	0, // R
 	0, // G
@@ -40,7 +36,6 @@ const p_color BACKGROUND_COLOR = {
 };
 
 //class MassObject
-//a MassObject object 
 class MassObject {
 private:
 	int objnumber; // the position in which the MassObject was initially initialized
@@ -308,22 +303,25 @@ void fill_background(unsigned char*** o_buffer, int px, int pz, p_color bg_color
 }
 
 //draws a circle (representative of a MassObject)
-void fill_circle(unsigned char*** o_buffer, int px, int pz, r_circle s_circle)
+void fill_circle(unsigned char*** o_buffer, int px, int py, r_circle s_circle)
 {
-	//cout << s_circle.radius << ": ";
-	//cout << s_circle.cx << " " << s_circle.cy;
-	for (int i = 0; i < pz; i++) {
-		for (int j = 0; j < px; j++) {
-			float d = sqrt((s_circle.cx - j) * (s_circle.cx - j) + (s_circle.cy - i) * (s_circle.cy - i));
+	// calculate for loop bounds
+	int leftBound = s_circle.cx - 2 * s_circle.radius > 0 ? s_circle.cx - 2 * s_circle.radius : 0;
+	int rightBound = s_circle.cx + 2 * s_circle.radius < px ? s_circle.cx + 2 * s_circle.radius : px;
+	int topBound = s_circle.cy - 2 * s_circle.radius > 0 ? s_circle.cy - 2 * s_circle.radius : 0;
+	int bottomBound = s_circle.cy + 2 * s_circle.radius < py ? s_circle.cy + 2 * s_circle.radius : py;
+
+	for (int i = topBound; i < bottomBound; i++) {
+		for (int j = leftBound; j < rightBound; j++) {
+			float d = 
+				sqrt((float)(s_circle.cx - j) * (float)(s_circle.cx - j) + (float)(s_circle.cy - i) * (float)(s_circle.cy - i));
 			if (d <= s_circle.radius) {
-				//cout << "Painted.";
 				o_buffer[i][j][0] = s_circle.circle_color.r;
 				o_buffer[i][j][1] = s_circle.circle_color.g;
 				o_buffer[i][j][2] = s_circle.circle_color.b;
 			}
 		}
 	}
-	//cout << endl << endl;
 }
 
 //sets circle values based on the Mass of a MassObject
@@ -331,19 +329,16 @@ void fill_circle(unsigned char*** o_buffer, int px, int pz, r_circle s_circle)
 //yellower objects are heavier and larger
 void set_circle_values(r_circle& thisObject, MassObject mo, int px, int pz)
 {
-	float value = log10(mo.getMass() / pow(10, 22));
+	float value = log10(mo.getMass() / (float)pow(10, 22));
 	thisObject.circle_color.r = (int)(255 - 95 * pow(0.804, value));
 	thisObject.circle_color.g = (int)(255 - 255 * pow(0.725, value));
 	thisObject.circle_color.b = 0;
 	thisObject.cx = mo.getPosition_x() * px / FIELDX;
 	thisObject.cy = mo.getPosition_y() * pz / FIELDY;
-	//cout << mo.getPosition_x() << " " << mo.getPosition_y() << " ";
-	//cout << thisObject.cx << " " << thisObject.cy << endl;
-	thisObject.radius = (int)(sqrt(mo.getMass()) / pow(10, 11) / 5 + 0.5);
-	if (thisObject.radius == 0) {
-		thisObject.radius++;
+	thisObject.radius = (int)(sqrt(mo.getMass()) / (float)pow(10, 11) / 5. + 0.5);
+	if (thisObject.radius < 1) {
+		thisObject.radius = 1;
 	}
-	//cout << "IF: " << thisObject.cx << "  " << thisObject.cy << "  " << thisObject.radius << endl;
 }
 
 //the next two methods recursively sort MassObjects in order of decreasing mass
@@ -406,10 +401,7 @@ MassObject* updateObjects(MassObject* A, MassObject* B) {
 
 	float v3 = (*A).getvy();
 	float v4 = (*B).getvy();
-	//cout << m1 << " " << m2 << endl;
-	//cout << v3 << " " << v4 << endl;
 	float vy = (m1 * v3 + m2 * v4) / (m1 + m2);
-	//cout << vx << " " << vy << endl;
 	(*A).changeV(vx, vy);
 	(*A).changeMass((*B).getMass());
 

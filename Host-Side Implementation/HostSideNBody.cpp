@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <chrono>
 #include <cmath>
@@ -8,6 +9,9 @@
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
+//number of cycles done for the simulation
+const int NUMBEROFCYCLES = 1000;
+
 //semi-randomly initialize the MassObjects given the field size and the number of objects
 //all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
 //40% of the objects will be initialized in a central 2.5*10^10 by 2.5*10^10 field
@@ -15,52 +19,36 @@ const bool DRY_RUN = false;
 void init(int px, int pz, int numberOfObjects, MassObject* arr) {
 	int benchmark1 = numberOfObjects * 4 / 10;
 	for (int i = 0; i < benchmark1; i++) {
-		float x = (0.5 + randfloat(0, 2.5)) * pow(10, 10);
-		float y = (0.5 + randfloat(0, 2.5)) * pow(10, 10);
-		float vx = rand() % (500) - 250;
-		vx *= pow(10, 3);
-		float vy = rand() % (500) - 250;
-		vy *= pow(10, 3);
-		float mass = (rand() % 100 + 1) * pow(10, 22);
+		float x = (0.5 + randfloat(0, 2.5)) * (float)pow(10, 10);
+		float y = (0.5 + randfloat(0, 2.5)) * (float)pow(10, 10);
+		float vx = rand() % (500) - 250.;
+		vx *= (float)pow(10, 3);
+		float vy = rand() % (500) - 250.;
+		vy *= (float)pow(10, 3);
+		float mass = (rand() % 100 + 1) * (float)pow(10, 22);
 		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
 	}
 	for (int i = benchmark1; i < numberOfObjects; i++) {
-		float x = (randfloat(0, 4)) * pow(10, 10);
-		float y = (randfloat(0, 4)) * pow(10, 10);
+		float x = (randfloat(0, 4)) * (float)pow(10, 10);
+		float y = (randfloat(0, 4)) * (float)pow(10, 10);
 		float vx = rand() % (500) - 250;
-		vx *= pow(10, 4);
+		vx *= (float)pow(10, 4);
 		float vy = rand() % (500) - 250;
-		vy *= pow(10, 4);
-		float mass = (rand() % 100 + 1) * pow(10, 22);
+		vy *= (float)pow(10, 4);
+		float mass = (rand() % 100 + 1) * (float)pow(10, 22);
 		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
 	}
 }
 
 int main() {
 	srand(SEED_VALUE);
-	int px;
-	int pz;
-	int numberOfObjects;
+	int px = 800;
+	int pz = 800;
+	int numberOfObjects = 512;
 	float stepsize = 25;
-	px = 800;
-	pz = 800;
-	numberOfObjects = 256;
 	std::cout << "The frame width is " << px << "." << std::endl;
 	std::cout << "The frame height is " << pz << "." << std::endl;
 	std::cout << "The number of objects used is " << numberOfObjects << "." << std::endl;
-
-	//initialize output buffer
-	unsigned char*** buffer = new unsigned char** [pz];
-	int i, j;
-	for (i = 0; i < pz; i++)
-	{
-		buffer[i] = new unsigned char* [px];
-		for (j = 0; j < px; j++)
-		{
-			buffer[i][j] = new unsigned char[3];
-		}
-	}
-	std::cout << "Buffer initialized." << std::endl;
 
 	//initialize objects
 	MassObject** allArrs = new MassObject * [NUMBEROFCYCLES];
@@ -98,8 +86,41 @@ int main() {
 
 	std::cout << "Simulation completed in " << elapsed_time.count() << " s\n";
 
+	// write allArrs data into a text file
+	std::ofstream myfile;
+	myfile.open("objectsData.txt");
+	std::cout << "Output data to objectsData.txt...\n";
+	for (int i = 0; i < NUMBEROFCYCLES; i++) {
+		for (int j = 0; j < remainingObjs[i]; j++) {
+			myfile << allArrs[i][j].getObjNumber();
+			myfile << " " << allArrs[i][j].getMass();
+
+			myfile << " " << allArrs[i][j].getPosition_x();
+			myfile << " " << allArrs[i][j].getPosition_y();
+
+			myfile << " " << allArrs[i][j].getax();
+			myfile << " " << allArrs[i][j].getay();
+
+			myfile << " " << allArrs[i][j].getvx();
+			myfile << " " << allArrs[i][j].getvy() << std::endl;
+		}
+	}
+	myfile.close();
+
 	// draw frames if not a dry run
 	if (!DRY_RUN) {
+		//initialize output buffer
+		unsigned char*** buffer = new unsigned char** [pz];
+		for (int i = 0; i < pz; i++)
+		{
+			buffer[i] = new unsigned char* [px];
+			for (int j = 0; j < px; j++)
+			{
+				buffer[i][j] = new unsigned char[3];
+			}
+		}
+
+		std::cout << "Buffer initialized." << std::endl;
 		for (int i = 0; i < NUMBEROFCYCLES; i++) {
 			fill_background(buffer, px, pz, BACKGROUND_COLOR);
 			for (int j = 0; j < remainingObjs[i]; j++) {
@@ -112,7 +133,13 @@ int main() {
 				write_bmp_file(i / 2, buffer, px, pz);
 			}
 		}
+		delete [] buffer;
 	}
 
+	for (int i = 0; i < NUMBEROFCYCLES; i++) {
+		delete(allArrs[i]);
+	}
+	delete [] allArrs;
+	delete [] remainingObjs;
 	return 0;
 }
