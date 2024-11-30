@@ -43,10 +43,8 @@ private:
 	float mass; // the mass of the object
 
 	//position
-	float x0; // initial position x
-	float y0; // initial position y
-	float x; //current position x
-	float y; //current position y
+	float x; //position x
+	float y; //position y
 
 	//velocity
 	float vx; //x-component
@@ -73,10 +71,8 @@ public:
 	void changePosition(float stepsize); //changes the position of the object given a stepsize (i.e. change in time)
 };
 MassObject::MassObject(float start_x, float start_y, float start_vx, float start_vy, float start_mass, int ob_no) {
-	x0 = start_x;
-	y0 = start_y;
-	x = x0;
-	y = y0;
+	x = start_x;
+	y = start_y;
 	ax = 0;
 	ay = 0;
 	vx = start_vx;
