@@ -10,14 +10,14 @@ const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
 //number of cycles done for the simulation
-const int NUMBEROFCYCLES = 1000;
+const int NUMBEROFCYCLES = 4000;
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
-//all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
+//all objects are randomly initialized with a mass between 10^21 kg to 10^23 kg
 //40% of the objects will be initialized in a central 2.5*10^10 by 2.5*10^10 field
 //The remaining 60% can spawn anywhere in the frame's field
 void init(int px, int pz, int numberOfObjects, MassObject* arr) {
-	int benchmark1 = numberOfObjects * 4 / 10;
+	int benchmark1 = numberOfObjects * 3 / 10;
 	for (int i = 0; i < benchmark1; i++) {
 		float x = (0.5 + randfloat(0, 2.5)) * (float)pow(10, 10);
 		float y = (0.5 + randfloat(0, 2.5)) * (float)pow(10, 10);
@@ -25,7 +25,7 @@ void init(int px, int pz, int numberOfObjects, MassObject* arr) {
 		vx *= (float)pow(10, 3);
 		float vy = rand() % (500) - 250.;
 		vy *= (float)pow(10, 3);
-		float mass = (rand() % 100 + 1) * (float)pow(10, 22);
+		float mass = (rand() % 100 + 1) * (float)pow(10, 21);
 		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
 	}
 	for (int i = benchmark1; i < numberOfObjects; i++) {
@@ -35,7 +35,7 @@ void init(int px, int pz, int numberOfObjects, MassObject* arr) {
 		vx *= (float)pow(10, 4);
 		float vy = rand() % (500) - 250;
 		vy *= (float)pow(10, 4);
-		float mass = (rand() % 100 + 1) * (float)pow(10, 22);
+		float mass = (rand() % 100 + 1) * (float)pow(10, 21);
 		*(arr + i) = MassObject(x, y, vx, vy, mass, i);
 	}
 }
@@ -44,7 +44,7 @@ int main() {
 	srand(SEED_VALUE);
 	int px = 800;
 	int pz = 800;
-	int numberOfObjects = 512;
+	int numberOfObjects = 2048;
 	float stepsize = 25;
 	std::cout << "The frame width is " << px << "." << std::endl;
 	std::cout << "The frame height is " << pz << "." << std::endl;
