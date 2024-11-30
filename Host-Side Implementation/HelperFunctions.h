@@ -243,7 +243,7 @@ void write_bmp_file(int f_number, unsigned char*** output_buffer, int px, int pz
 		std::cout << "Error.  Can't open output file " << o_file_name << "." << std::endl;
 		return;
 	}
-	std::cout << "Opening output file " << o_file_name << "." << std::endl;
+	// std::cout << "Opening output file " << o_file_name << "." << std::endl;
 
 	int rem;
 	rem = 3 * px % 4;

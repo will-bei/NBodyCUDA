@@ -120,7 +120,7 @@ int main() {
 			}
 		}
 
-		std::cout << "Buffer initialized." << std::endl;
+		std::cout << "Buffer initialized and drawing frames..." << std::endl;
 		for (int i = 0; i < NUMBEROFCYCLES; i++) {
 			fill_background(buffer, px, pz, BACKGROUND_COLOR);
 			for (int j = 0; j < remainingObjs[i]; j++) {
@@ -133,6 +133,7 @@ int main() {
 				write_bmp_file(i / 2, buffer, px, pz);
 			}
 		}
+		std::cout << "Output images generated." << std::endl;
 		delete [] buffer;
 	}
 
