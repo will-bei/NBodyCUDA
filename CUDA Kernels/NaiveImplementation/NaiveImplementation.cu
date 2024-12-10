@@ -9,6 +9,7 @@
 #include <ctime>
 
 #include "HelperFunctions.h"
+#include "ErrorChecker.cuh"
 
 #define NUMBER_OF_CYCLES 1000
 #define TILE_WIDTH 16
@@ -16,9 +17,9 @@
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
-cudaError_t addWithCuda(MassObject** allArrs, int* remainingObjs, int px, int py);
+cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize);
 
-__global__ void calculateAcc(float3* pos, float2* globalAcc) {
+__global__ void calculateNaiveAcc(float3* pos, float2* globalAcc) {
     //x and y are the 2D positions and z is the weight of the particle  
     int i, j, tile;
     float2 acc = { 0.0f, 0.0f };
@@ -33,12 +34,15 @@ __global__ void calculateAcc(float3* pos, float2* globalAcc) {
         vec.y = pos[gtid].y - pos[j].y;
         //distance squared calculation
         float sqrddist = vec.x * vec.x + vec.y * vec.y;
-        //net_acc  from this object
-        float net_acc = pos[j].z / sqrddist;
 
-        //increment acceleration
-        acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
-        acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
+        if (sqrddist > 0) {
+            //net_acc  from this object
+            float net_acc = pos[j].z / sqrddist;
+
+            //increment acceleration
+            acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
+            acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
+        }
     }
     globalAcc[gtid] = acc;
 }
@@ -86,6 +90,7 @@ int main()
     MassObject** allArrs = new MassObject * [NUMBER_OF_CYCLES];
     allArrs[0] = new MassObject[numberOfObjects];
     int* remainingObjs = new int[NUMBER_OF_CYCLES];
+    remainingObjs[0] = numberOfObjects;
     init(px, pz, numberOfObjects, allArrs[0]);
 
     std::cout << "MassObjects initialized" << std::endl;
@@ -93,7 +98,7 @@ int main()
     std::chrono::time_point<std::chrono::system_clock> start, end;
 
     //perform simulations
-    nbodyHelperFunction(allArrs, remainingObjs, px, pz);
+    nbodyHelperFunction(allArrs, remainingObjs, px, pz, stepsize);
 
     end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_time = end - start;
@@ -160,29 +165,112 @@ int main()
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int pz)
+cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int pz, int stepsize)
 {
     cudaError_t cudaStatus;
 
-    /*
+    // Choose which GPU to run on, change this on a multi-GPU system.
+    cudaStatus = checkCuda(cudaSetDevice(0));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stdout, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+        goto Error;
+    }
     
-    Get the CUDA device properties
-Init/Allocate float3 pointers dev_accIn, devaccOut = (float3*)malloc(numObjs * sizeof(float3))
-for i = 1 to the NUMBEROFCYCLES - 1
-	cudaCopy the objectnumber, ax, ay from objArray[i-1] to dev_accIn
+    // initialize device pointers
+    float3* dev_accIn;
+    float2* dev_accOut;
+    cudaStatus = checkCuda(cudaMalloc((void**)&dev_accIn, remainingObjs[0] * sizeof(float3)));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stdout, "cudaMalloc failed!");
+        goto Error;
+    }
 
-	Initialize the blockDim and threadsPerBlock
-	Run the acceleration kernel with dimensions blockDim and threadsPerBlock
-Kernel input: dev_accIn kernel output: dev_accOut
-	Wait for kernel to finish running
-	Copy kernel output dev_accOut to objectArray[i] acceleration components
-	Update objectArray[i] velocity and positions
-	Check for collisions and update objectArray[i] contents
-		Collisions method is in header file
-end loop
+    cudaStatus = checkCuda(cudaMalloc((void**)&dev_accOut, remainingObjs[0] * sizeof(float3)));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stdout, "cudaMalloc failed!");
+        cudaFree(dev_accIn);
+        goto Error;
+    }
 
+    for (int i = 1; i < NUMBER_OF_CYCLES; i++) {
+        // cudaCopy the ax, ay, and mass from objArray to dev_accIn
+        float3* accIn = (float3*)malloc(remainingObjs[i - 1] * sizeof(float3));
+        for (int j = 0; j < remainingObjs[i - 1]; j++) {
+            accIn[j].x = allArrs[i - 1][j].getPosition_x();
+            accIn[j].y = allArrs[i - 1][j].getPosition_y();
+            accIn[j].z = allArrs[i - 1][j].getMass();
+        }
+        
+        cudaStatus = checkCuda(cudaMemcpy(dev_accIn, accIn, remainingObjs[i - 1] * sizeof(float3), cudaMemcpyHostToDevice));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stdout, "cudaMemcpy failed!");
+            checkCuda(cudaFree(dev_accIn));
+            checkCuda(cudaFree(dev_accOut));
+            goto Error;
+        }
+
+        dim3 threadsPerBlock(TILE_WIDTH);
+        dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
+        calculateNaiveAcc <<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut);
+
+        // Check for any errors launching the kernel
+        cudaStatus = checkCuda(cudaGetLastError());
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stdout, "kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+            checkCuda(cudaFree(dev_accIn));
+            checkCuda(cudaFree(dev_accOut));
+            goto Error;
+        }
+
+        // call cudaDeviceSynchronize() to wait for the kernel to finish, and return
+        // any errors encountered during the launch.
+        cudaStatus = checkCuda(cudaDeviceSynchronize());
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stdout, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
+            checkCuda(cudaFree(dev_accIn));
+            checkCuda(cudaFree(dev_accOut));
+            goto Error;
+        }
+
+        // retrieve result data from device back to host
+        float2* accOut = (float2*)malloc(remainingObjs[i - 1] * sizeof(float2));
+        cudaStatus = checkCuda(cudaMemcpy(accOut, dev_accOut, remainingObjs[i - 1] * sizeof(float2), cudaMemcpyDeviceToHost));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stdout, "cudaMemcpy failed!");
+            checkCuda(cudaFree(dev_accIn));
+            checkCuda(cudaFree(dev_accOut));
+            free(accIn);
+            free(accOut);
+            goto Error;
+        }
+
+        // Update allArrs with the result velocity and positions
+        // init current iteration
+        allArrs[i] = new MassObject[remainingObjs[i - 1]];
+        for (int j = 0; j < remainingObjs[i - 1]; j++) {
+            allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
+            allArrs[i][j].changePosition(stepsize);
+        }
+
+        // Check for collisions and update arr contents
+        //check if any objects have collided
+        remainingObjs[i] = check_collisions(allArrs[i], remainingObjs[i - 1], px, pz);
+
+        free(accIn);
+        free(accOut);
+    }
+
+    // cudaDeviceReset( ) must be called in order for profiling and
+    // tracing tools such as Nsight and Visual Profiler to show complete traces.
+    cudaStatus = checkCuda(cudaDeviceReset());
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stdout, "cudaDeviceReset failed!");
+        checkCuda(cudaFree(dev_accIn));
+        checkCuda(cudaFree(dev_accOut));
+        goto Error;
+    }
     
-    */
-    
+    Error:
+
     return cudaStatus;
 }
