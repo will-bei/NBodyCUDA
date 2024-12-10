@@ -19,14 +19,16 @@ const bool DRY_RUN = false;
 
 cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize);
 
-__global__ void calculateNaiveAcc(float3* pos, float2* globalAcc) {
+__device__ float CUDA_GRAV_CONST = 6.67e-4;
+
+__global__ void calculateNaiveAcc(float3* pos, float2* globalAcc, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
     int i, j, tile;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
 
     //acceleration calculation
-    for (j = 0; j < blockDim.x; j++) {
+    for (j = 0; j < size; j++) {
         float2 vec;
 
         //vector from current particle to its computational partner particle
@@ -36,14 +38,15 @@ __global__ void calculateNaiveAcc(float3* pos, float2* globalAcc) {
         float sqrddist = vec.x * vec.x + vec.y * vec.y;
 
         if (sqrddist > 0) {
-            //net_acc  from this object
-            float net_acc = pos[j].z / sqrddist;
+            // net_acc  from this object
+            float net_acc = -CUDA_GRAV_CONST*pos[j].z / sqrddist;
 
             //increment acceleration
             acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
             acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
         }
     }
+
     globalAcc[gtid] = acc;
 }
 
@@ -87,9 +90,9 @@ int main()
     std::cout << "The number of objects used is " << numberOfObjects << "." << std::endl;
 
     //initialize objects
-    MassObject** allArrs = new MassObject * [NUMBER_OF_CYCLES];
-    allArrs[0] = new MassObject[numberOfObjects];
-    int* remainingObjs = new int[NUMBER_OF_CYCLES];
+    MassObject** allArrs = (MassObject**)malloc(NUMBER_OF_CYCLES * sizeof(MassObject*));
+    allArrs[0] = (MassObject*)malloc(numberOfObjects * sizeof(MassObject));
+    int* remainingObjs = (int*)malloc(NUMBER_OF_CYCLES * sizeof(int));
     remainingObjs[0] = numberOfObjects;
     init(px, pz, numberOfObjects, allArrs[0]);
 
@@ -157,10 +160,10 @@ int main()
     }
 
     for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
-        delete(allArrs[i]);
+        free(allArrs[i]);
     }
-    delete[] allArrs;
-    delete[] remainingObjs;
+    free(allArrs);
+    free(remainingObjs);
     return 0;
 }
 
@@ -211,7 +214,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
         dim3 threadsPerBlock(TILE_WIDTH);
         dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
-        calculateNaiveAcc <<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut);
+        calculateNaiveAcc<<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut, remainingObjs[i-1]);
 
         // Check for any errors launching the kernel
         cudaStatus = checkCuda(cudaGetLastError());
@@ -246,10 +249,14 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
         // Update allArrs with the result velocity and positions
         // init current iteration
-        allArrs[i] = new MassObject[remainingObjs[i - 1]];
+        allArrs[i] = (MassObject*)malloc(remainingObjs[i - 1] * sizeof(MassObject));
         for (int j = 0; j < remainingObjs[i - 1]; j++) {
-            allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
-            allArrs[i][j].changePosition(stepsize);
+            MassObject currentObj = allArrs[i - 1][j];
+            currentObj.setAcceleration(accOut[j].x, accOut[j].y);
+            currentObj.changePosition(stepsize);
+            allArrs[i][j] = currentObj;
+            /*allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
+            allArrs[i][j].changePosition(stepsize);*/
         }
 
         // Check for collisions and update arr contents
