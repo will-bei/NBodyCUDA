@@ -20,40 +20,43 @@ const bool DRY_RUN = false;
 
 cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize);
 
-__global__ void calculateSharedAcc(float3* pos) {
+__global__ void calculateCorseAcc(float3* pos, float2* globalAcc) {
     //x and y are the 2D positions and z is the weight of the particle  
-    extern __shared__ float3 shPosition[];
     float3* globalPos = (float3*)pos;
     float2* globalAcc = (float2*)pos;
 
-    int i, j, tile;
+    int i, j, tile, c;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+    int COARSENING_FACTOR = 5 //HAS to be less than TILE_WIDTH
     
     //operates tile by tile for optimization (may change logic this later on)
     for (i = 0, tile = 0; i < N; i += TILE_WIDTH, tile++)
     {
         int idx = tile * blockDim.x + threadIdx.x;
-        shPosition[threadIdx.x] = globalPos[idx];
         __syncthreads();
 
         //acceleration calculation
-        for (j = 0; j < blockDim.x; j++) {
-            float2 vec;
+        for (c = 0; c < COARSENING_FACTOR; c++) //haha c++
+        {
 
-            //vector from current particle to its computational partner particle
-            vec.x = pos[gtid].x - pos[j].x;
-            vec.y = pos[gtid].y - pos[j].y;
-            //distance squared calculation
-            float sqrddist = vec.x * vec.x + vec.y * vec.y;
+            for (j = 0; j < blockDim.x; j++) {
+                float2 vec;
 
-            if (sqrddist > 0) {
-                //net_acc  from this object
-                float net_acc = pos[j].z / sqrddist;
+                //vector from current particle to its computational partner particle
+                vec.x = globalPos[gtid + c].x - globalPos[j].x;
+                vec.y = globalPos[gtid + c].y - globalPos[j].y;
+                //distance squared calculation
+                float sqrddist = vec.x * vec.x + vec.y * vec.y;
 
-                //increment acceleration
-                acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
-                acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
+                if (sqrddist > 0) {
+                    //net_acc  from this object
+                    float net_acc = pos[j].z / sqrddist;
+
+                    //increment acceleration
+                    acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
+                    acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
+                }
             }
         }
     }
@@ -224,7 +227,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
         dim3 threadsPerBlock(TILE_WIDTH);
         dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
-        calculateSharedAcc <<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut);
+        calculateCorseAcc <<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut);
 
         // Check for any errors launching the kernel
         cudaStatus = checkCuda(cudaGetLastError());
