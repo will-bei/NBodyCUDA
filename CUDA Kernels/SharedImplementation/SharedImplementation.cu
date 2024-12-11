@@ -13,12 +13,12 @@
 
 #define NUMBER_OF_CYCLES 1000
 #define TILE_WIDTH 16
-int N = 300; //need to redefine this as needed
+__constant__ int N = 512; // match it to total number of objects
 
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
-cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize);
+cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize, double& calculationTime);
 
 __device__ float CUDA_GRAV_CONST = 6.67e-4;
 
@@ -110,15 +110,18 @@ int main()
 
     std::cout << "MassObjects initialized" << std::endl;
     std::cout << "Beginning simulation... " << std::endl;
+    double calculationTime = 0;
     std::chrono::time_point<std::chrono::system_clock> start, end;
+    start = std::chrono::system_clock::now();
 
     //perform simulations
-    nbodyHelperFunction(allArrs, remainingObjs, px, pz, stepsize);
+    nbodyHelperFunction(allArrs, remainingObjs, px, pz, stepsize, calculationTime);
 
     end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_time = end - start;
 
     std::cout << "Simulation completed in " << elapsed_time.count() << " s\n";
+    std::cout << "Time spent simulating: " << calculationTime << " s\n";
 
     // write allArrs data into a text file
     std::ofstream myfile;
@@ -180,9 +183,11 @@ int main()
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int pz, int stepsize)
+cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int pz, int stepsize, double& calculationTime)
 {
     cudaError_t cudaStatus;
+    std::chrono::time_point<std::chrono::system_clock> start, end;
+    std::chrono::duration<double> sumTime = std::chrono::seconds::zero();
 
     // Choose which GPU to run on, change this on a multi-GPU system.
     cudaStatus = checkCuda(cudaSetDevice(0));
@@ -226,7 +231,10 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
         dim3 threadsPerBlock(TILE_WIDTH);
         dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
-        calculateSharedAcc <<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut);
+        start = std::chrono::system_clock::now();
+        calculateSharedAcc <<<threadsPerBlock, blocks >>>(dev_accIn);
+        end = std::chrono::system_clock::now();
+        sumTime += end - start;
 
         // Check for any errors launching the kernel
         cudaStatus = checkCuda(cudaGetLastError());
@@ -286,6 +294,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
     }
     
     Error:
+    calculationTime = sumTime.count();
 
     return cudaStatus;
 }
