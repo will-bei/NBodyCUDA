@@ -20,6 +20,8 @@ const bool DRY_RUN = false;
 
 cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize);
 
+__device__ float CUDA_GRAV_CONST = 6.67e-4;
+
 __global__ void calculateSharedAcc(float3* pos) {
     //x and y are the 2D positions and z is the weight of the particle  
     extern __shared__ float3 shPosition[];
@@ -49,7 +51,7 @@ __global__ void calculateSharedAcc(float3* pos) {
 
             if (sqrddist > 0) {
                 //net_acc  from this object
-                float net_acc = pos[j].z / sqrddist;
+                float net_acc = -CUDA_GRAV_CONST * pos[j].z / sqrddist;
 
                 //increment acceleration
                 acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
