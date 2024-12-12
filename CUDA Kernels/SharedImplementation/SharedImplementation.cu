@@ -12,8 +12,8 @@
 #include "ErrorChecker.cuh"
 
 #define NUMBER_OF_CYCLES 1000
-#define TILE_WIDTH 16
-__constant__ int N = 512; // match it to total number of objects
+#define TILE_WIDTH 256
+__constant__ int N = 2048; // match it to total number of objects
 
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
@@ -22,11 +22,10 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
 __device__ float CUDA_GRAV_CONST = 6.67e-4;
 
-__global__ void calculateSharedAcc(float3* pos) {
+__global__ void calculateSharedAcc(float3* pos, float2* out, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
     extern __shared__ float3 shPosition[];
     float3* globalPos = (float3*)pos;
-    float2* globalAcc = (float2*)pos;
 
     int i, j, tile;
     float2 acc = { 0.0f, 0.0f };
@@ -44,8 +43,8 @@ __global__ void calculateSharedAcc(float3* pos) {
             float2 vec;
 
             //vector from current particle to its computational partner particle
-            vec.x = pos[gtid].x - pos[j].x;
-            vec.y = pos[gtid].y - pos[j].y;
+            vec.x = pos[gtid].x - shPosition[j].x;
+            vec.y = pos[gtid].y - shPosition[j].y;
             //distance squared calculation
             float sqrddist = vec.x * vec.x + vec.y * vec.y;
 
@@ -59,7 +58,7 @@ __global__ void calculateSharedAcc(float3* pos) {
             }
         }
     }
-    globalAcc[gtid] = acc;
+    out[gtid] = acc;
 }
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
@@ -95,7 +94,7 @@ int main()
     srand(SEED_VALUE);
     int px = 800;
     int pz = 800;
-    int numberOfObjects = 512;
+    int numberOfObjects = 2048;
     float stepsize = 25;
     std::cout << "The frame width is " << px << "." << std::endl;
     std::cout << "The frame height is " << pz << "." << std::endl;
@@ -195,7 +194,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         fprintf(stdout, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
         goto Error;
     }
-    
+
     // initialize device pointers
     float3* dev_accIn;
     float2* dev_accOut;
@@ -220,7 +219,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
             accIn[j].y = allArrs[i - 1][j].getPosition_y();
             accIn[j].z = allArrs[i - 1][j].getMass();
         }
-        
+
         cudaStatus = checkCuda(cudaMemcpy(dev_accIn, accIn, remainingObjs[i - 1] * sizeof(float3), cudaMemcpyHostToDevice));
         if (cudaStatus != cudaSuccess) {
             fprintf(stdout, "cudaMemcpy failed!");
@@ -230,9 +229,9 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         }
 
         dim3 threadsPerBlock(TILE_WIDTH);
-        dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
+        dim3 blocks(1+ remainingObjs[i - 1] / TILE_WIDTH);
         start = std::chrono::system_clock::now();
-        calculateSharedAcc <<<threadsPerBlock, blocks >>>(dev_accIn);
+        calculateSharedAcc << <threadsPerBlock, blocks >> > (dev_accIn, dev_accOut, remainingObjs[i - 1]);
         end = std::chrono::system_clock::now();
         sumTime += end - start;
 
@@ -269,10 +268,14 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
         // Update allArrs with the result velocity and positions
         // init current iteration
-        allArrs[i] = new MassObject[remainingObjs[i - 1]];
+        allArrs[i] = (MassObject*)malloc(remainingObjs[i - 1] * sizeof(MassObject));
         for (int j = 0; j < remainingObjs[i - 1]; j++) {
-            allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
-            allArrs[i][j].changePosition(stepsize);
+            MassObject currentObj = allArrs[i - 1][j];
+            currentObj.setAcceleration(accOut[j].x, accOut[j].y);
+            currentObj.changePosition(stepsize);
+            allArrs[i][j] = currentObj;
+            /*allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
+            allArrs[i][j].changePosition(stepsize);*/
         }
 
         // Check for collisions and update arr contents
@@ -292,8 +295,8 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         checkCuda(cudaFree(dev_accOut));
         goto Error;
     }
-    
-    Error:
+
+Error:
     calculationTime = sumTime.count();
 
     return cudaStatus;

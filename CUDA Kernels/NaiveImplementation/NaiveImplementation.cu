@@ -83,7 +83,7 @@ int main()
     srand(SEED_VALUE);
     int px = 800;
     int pz = 800;
-    int numberOfObjects = 512;
+    int numberOfObjects = 2048;
     float stepsize = 25;
     std::cout << "The frame width is " << px << "." << std::endl;
     std::cout << "The frame height is " << pz << "." << std::endl;
