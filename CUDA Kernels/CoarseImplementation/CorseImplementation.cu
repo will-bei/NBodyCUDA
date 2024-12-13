@@ -282,7 +282,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         allArrs[i] = new MassObject[remainingObjs[i - 1]];
         for (int j = 0; j < remainingObjs[i - 1]; j++) {
             allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
-            allArrs[i][j].changePosition(stepsize);
+            allArrs[i][j].changePositionFromAcc(stepsize);
         }
 
         // Check for collisions and update arr contents
