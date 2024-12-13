@@ -127,13 +127,14 @@ void MassObject::changePosition(float stepsize) {
 	y += 0.5 * ay * stepsize * stepsize + stepsize * vy;
 }
 
-//converts int to a five digit string
-std::string int_to_five_digit_string(int frame_number)
+//converts int to a formatted string
+std::string int_to_formatted_string(int frame_number)
 {
 	std::ostringstream strm;
-	strm << std::setfill('0') << std::setw(5) << frame_number;
+	strm << std::setfill('0') << std::setw(7) << frame_number;
 	return strm.str();
 }
+
 //converts string to int
 int string_to_int(std::string s)
 {
@@ -232,7 +233,7 @@ void write_bmp_header_file(std::ofstream& output_file, int px, int pz)
 void write_bmp_file(int f_number, unsigned char*** output_buffer, int px, int pz)
 {
 	std::ofstream ostrm_1;
-	std::string o_file_name = "outputimgs\\" + int_to_five_digit_string(f_number) + ".bmp";
+	std::string o_file_name = "outputimgs\\" + int_to_formatted_string(f_number) + ".bmp";
 	ostrm_1.open(o_file_name.c_str(), std::ios::out | std::ios::binary);
 	if (ostrm_1.fail())
 	{
@@ -453,7 +454,7 @@ float set_acc(float rsqrd, MassObject A) {
 	}
 
 	float acc;
-	acc = 6.67 * (A.getMass()) / rsqrd / 10000;
+	acc = GRAV_CONST * (A.getMass()) / rsqrd;
 
 	return acc;
 }
