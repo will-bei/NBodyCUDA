@@ -14,7 +14,7 @@
 #define NUMBER_OF_CYCLES 1000
 #define CYCLES_PER_IMAGE 2
 #define TILE_WIDTH 256
-__constant__ int N = 2048; // match it to total number of objects
+//__constant__ int N = 1024; // match it to total number of objects
 
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
@@ -23,44 +23,57 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
 __device__ float CUDA_GRAV_CONST = 6.67e-11;
 
+extern __shared__ float3 shPosition[];
+
+__device__ float2 bodyBody(float3 pos1, float3 pos2, float2 accel) {
+    float2 vec;
+
+    //vector from current particle to its computational partner particle
+    vec.x = pos1.x - pos2.x;
+    vec.y = pos1.y - pos2.y;
+    //distance squared calculation
+    float sqrddist = vec.x * vec.x + vec.y * vec.y;
+
+    if (sqrddist > 0) {
+        //net_acc  from this object
+        float net_acc = -CUDA_GRAV_CONST * pos1.z / sqrddist;
+
+        //increment acceleration
+        accel.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
+        accel.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
+    }
+    return accel;
+}
+
+__device__ float2 tile_calculation(float3 pos, float2 accel) {
+    //acceleration calculation
+    int j;
+    for (j = 0; j < blockDim.x; j++) {
+        accel = bodyBody(pos, shPosition[j], accel);
+    }
+    return accel;
+}
+
 __global__ void calculateSharedAcc(float3* pos, float2* out, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
-    extern __shared__ float3 shPosition[];
     float3* globalPos = (float3*)pos;
 
-    int i, j, tile;
+    int i, tile;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
     
     //operates tile by tile for optimization (may change logic this later on)
-    for (i = 0, tile = 0; i < N; i += TILE_WIDTH, tile++)
+    for (i = 0, tile = 0; i < size; i += TILE_WIDTH, tile++)
     {
         int idx = tile * blockDim.x + threadIdx.x;
         shPosition[threadIdx.x] = globalPos[idx];
         __syncthreads();
-
-        //acceleration calculation
-        for (j = 0; j < blockDim.x; j++) {
-            float2 vec;
-
-            //vector from current particle to its computational partner particle
-            vec.x = pos[gtid].x - shPosition[j].x;
-            vec.y = pos[gtid].y - shPosition[j].y;
-            //distance squared calculation
-            float sqrddist = vec.x * vec.x + vec.y * vec.y;
-
-            if (sqrddist > 0) {
-                //net_acc  from this object
-                float net_acc = -CUDA_GRAV_CONST * pos[j].z / sqrddist;
-
-                //increment acceleration
-                acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
-                acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
-            }
-        }
+        acc = tile_calculation(globalPos[idx], acc);
+        __syncthreads();
     }
     out[gtid] = acc;
 }
+
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
 //all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
