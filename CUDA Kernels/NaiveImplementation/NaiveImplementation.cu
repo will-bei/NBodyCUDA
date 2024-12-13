@@ -7,19 +7,20 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
-
+#include <random>
 #include "HelperFunctions.h"
 #include "ErrorChecker.cuh"
 
 #define NUMBER_OF_CYCLES 1000
-#define TILE_WIDTH 16
+#define CYCLES_PER_IMAGE 2
+#define TILE_WIDTH 256
 
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
 cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize, double& calculationTime);
 
-__device__ float CUDA_GRAV_CONST = 6.67e-4;
+__device__ float CUDA_GRAV_CONST = 6.67e-11;
 
 __global__ void calculateNaiveAcc(float3* pos, float2* globalAcc, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
@@ -78,13 +79,31 @@ void init(int px, int pz, int numberOfObjects, MassObject* arr) {
     }
 }
 
+//initialize objects in a normal distribution, centered on fieldX/2 and fieldY/2
+void init2(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
+    std::default_random_engine generator;
+    generator.seed(SEED_VALUE);
+    std::normal_distribution<float> distributionX(fieldX / 2, fieldX / 4);
+    std::normal_distribution<float> distributionY(fieldY / 2, fieldY / 4);
+    std::normal_distribution<float> distributionV(0, 500);
+
+    for (int i = 0; i < numberOfObjects; i++) {
+        float x = distributionX(generator);
+        float y = distributionY(generator);
+        float vx = distributionV(generator);
+        float vy = distributionV(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 22);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+}
+
 int main()
 {
     srand(SEED_VALUE);
     int px = 800;
     int pz = 800;
-    int numberOfObjects = 2048;
-    float stepsize = 25;
+    int numberOfObjects = 1024;
+    float stepsize = 7200;
     std::cout << "The frame width is " << px << "." << std::endl;
     std::cout << "The frame height is " << pz << "." << std::endl;
     std::cout << "The number of objects used is " << numberOfObjects << "." << std::endl;
@@ -94,7 +113,7 @@ int main()
     allArrs[0] = (MassObject*)malloc(numberOfObjects * sizeof(MassObject));
     int* remainingObjs = (int*)malloc(NUMBER_OF_CYCLES * sizeof(int));
     remainingObjs[0] = numberOfObjects;
-    init(px, pz, numberOfObjects, allArrs[0]);
+    init2(FIELDX, FIELDY, numberOfObjects, allArrs[0]);
 
     std::cout << "MassObjects initialized" << std::endl;
     std::cout << "Beginning simulation... " << std::endl;
@@ -146,17 +165,15 @@ int main()
         }
 
         std::cout << "Buffer initialized and drawing frames..." << std::endl;
-        for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
+        for (int i = 0; i < NUMBER_OF_CYCLES; i+=CYCLES_PER_IMAGE) {
             fill_background(buffer, px, pz, BACKGROUND_COLOR);
             for (int j = 0; j < remainingObjs[i]; j++) {
                 struct r_circle thisObject;
                 set_circle_values(thisObject, allArrs[i][j], px, pz);
                 fill_circle(buffer, px, pz, thisObject);
             }
-            //create a frame for every other cycle
-            if (i % 2 == 0) {
-                write_bmp_file(i / 2, buffer, px, pz);
-            }
+            // write a new img every CYCLES_PER_IMAGE
+            write_bmp_file(i / CYCLES_PER_IMAGE, buffer, px, pz);
         }
         std::cout << "Output images generated." << std::endl;
         delete[] buffer;
@@ -218,9 +235,9 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         }
 
         dim3 threadsPerBlock(TILE_WIDTH);
-        dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
+        dim3 blocks(1 + remainingObjs[i-1] / TILE_WIDTH);
         start = std::chrono::system_clock::now();
-        calculateNaiveAcc<<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut, remainingObjs[i-1]);
+        calculateNaiveAcc<<<threadsPerBlock, blocks>>>(dev_accIn, dev_accOut, remainingObjs[i-1]);
         end = std::chrono::system_clock::now();
         sumTime += end - start;
 
