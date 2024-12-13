@@ -179,6 +179,10 @@ int main()
         }
         std::cout << "Output images generated." << std::endl;
         delete[] buffer;
+
+        std::time_t end_time = std::chrono::system_clock::to_time_t(end);
+        std::stringstream dateStream;
+        dateStream << std::put_time(std::localtime(&end_time), "%Y%m%d_%X");
         // std::replace( s.begin(), s.end(), 'x', 'y')
         std::string date = dateStream.str();
         std::replace(date.begin(), date.end(), ':', '_');
