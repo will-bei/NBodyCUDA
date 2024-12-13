@@ -11,7 +11,7 @@ const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
 //number of cycles done for the simulation
-const int NUMBEROFCYCLES = 500000;
+const int NUMBEROFCYCLES = 50000;
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
 //all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
@@ -95,7 +95,7 @@ int main() {
 
 		//update each objects position
 		for (int j = 0; j < remainingObjs[i - 1]; j++) {
-			(allArrs[i][j]).changePosition(stepsize);
+			(allArrs[i][j]).changePositionFromAcc(stepsize);
 		}
 		
 		//check if any objects have collided

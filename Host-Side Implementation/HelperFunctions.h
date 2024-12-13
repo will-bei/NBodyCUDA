@@ -68,7 +68,8 @@ public:
 	void setAcceleration(float ax_new, float ay_new); //set the x- and y-components of acceleration to the respective parameter values
 	void changeAcceleration(float d_ax, float d_ay); //change the accelerations by d_ax and d_ay
 	void changeV(float vx_new, float vy_new); //sets the velocities of the object to the respective parameter values
-	void changePosition(float stepsize); //changes the position of the object given a stepsize (i.e. change in time)
+	void changePositionFromAcc(float stepsize); //changes the position of the object given a stepsize (i.e. change in time)
+	void changePositionFromCollision(float new_x, float new_y); //directly updates x and y position when a collision happens
 };
 MassObject::MassObject(float start_x, float start_y, float start_vx, float start_vy, float start_mass, int ob_no) {
 	x = start_x;
@@ -119,7 +120,11 @@ void MassObject::changeV(float vx_new, float vy_new) {
 	vx = vx_new;
 	vy = vy_new;
 }
-void MassObject::changePosition(float stepsize) {
+void MassObject::changePositionFromCollision(float new_x, float new_y) {
+	x = new_x;
+	y = new_y;
+}
+void MassObject::changePositionFromAcc(float stepsize) {
 	vx += ax * stepsize;
 	vy += ay * stepsize;
 
@@ -127,13 +132,14 @@ void MassObject::changePosition(float stepsize) {
 	y += 0.5 * ay * stepsize * stepsize + stepsize * vy;
 }
 
-//converts int to a five digit string
-std::string int_to_five_digit_string(int frame_number)
+//converts int to a formatted string
+std::string int_to_formatted_string(int frame_number)
 {
 	std::ostringstream strm;
-	strm << std::setfill('0') << std::setw(5) << frame_number;
+	strm << std::setfill('0') << std::setw(7) << frame_number;
 	return strm.str();
 }
+
 //converts string to int
 int string_to_int(std::string s)
 {
@@ -232,7 +238,7 @@ void write_bmp_header_file(std::ofstream& output_file, int px, int pz)
 void write_bmp_file(int f_number, unsigned char*** output_buffer, int px, int pz)
 {
 	std::ofstream ostrm_1;
-	std::string o_file_name = int_to_five_digit_string(f_number) + ".bmp";
+	std::string o_file_name = "outputimgs\\" + int_to_formatted_string(f_number) + ".bmp";
 	ostrm_1.open(o_file_name.c_str(), std::ios::out | std::ios::binary);
 	if (ostrm_1.fail())
 	{
@@ -398,7 +404,11 @@ MassObject* updateObjects(MassObject* A, MassObject* B) {
 	float v3 = (*A).getvy();
 	float v4 = (*B).getvy();
 	float vy = (m1 * v3 + m2 * v4) / (m1 + m2);
+	// new position is taken from the weighted average of the colliding objects
+	float new_x = m1 * A->getPosition_x() / (m1 + m2) + m2 * B->getPosition_x() / (m1 + m2);
+	float new_y = m1 * A->getPosition_y() / (m1 + m2) + m2 * B->getPosition_y() / (m1 + m2);
 	(*A).changeV(vx, vy);
+	(*A).changePositionFromCollision(new_x, new_y);
 	(*A).changeMass((*B).getMass());
 
 	return A;
@@ -453,7 +463,7 @@ float set_acc(float rsqrd, MassObject A) {
 	}
 
 	float acc;
-	acc = 6.67 * (A.getMass()) / rsqrd / 10000;
+	acc = GRAV_CONST * (A.getMass()) / rsqrd;
 
 	return acc;
 }
