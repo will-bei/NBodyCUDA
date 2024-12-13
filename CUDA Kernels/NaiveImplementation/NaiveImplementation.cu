@@ -195,7 +195,7 @@ int main()
             cmdArr[i] = cmd.at(i);
         }
         system(cmdArr);
-        free(cmdArr);
+        delete [] cmdArr;
     }
 
     for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
