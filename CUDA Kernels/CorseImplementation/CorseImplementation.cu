@@ -88,7 +88,7 @@ int main()
     srand(SEED_VALUE);
     int px = 800;
     int pz = 800;
-    int numberOfObjects = 512;
+    int numberOfObjects = 2048;
     float stepsize = 25;
     std::cout << "The frame width is " << px << "." << std::endl;
     std::cout << "The frame height is " << pz << "." << std::endl;
@@ -223,7 +223,8 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         }
 
         dim3 threadsPerBlock(TILE_WIDTH);
-        dim3 blocks(remainingObjs[i-1] / TILE_WIDTH);
+        dim3 blocks(1 + remainingObjs[i-1] / TILE_WIDTH);
+        start = std::chrono::system_clock::now();
         calculateCorseAcc <<<threadsPerBlock, blocks >>>(dev_accIn, dev_accOut, remainingObjs[i - 1]);
         end = std::chrono::system_clock::now();
         sumTime += end - start;
