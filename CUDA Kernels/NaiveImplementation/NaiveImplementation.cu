@@ -2,16 +2,18 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <chrono>
 #include <cmath>
 #include <ctime>
 #include <random>
+#include <string>
 #include "HelperFunctions.h"
 #include "ErrorChecker.cuh"
 
-#define NUMBER_OF_CYCLES 10000
+#define NUMBER_OF_CYCLES 1000
 #define CYCLES_PER_IMAGE 2
 #define TILE_WIDTH 256
 
@@ -177,6 +179,19 @@ int main()
         }
         std::cout << "Output images generated." << std::endl;
         delete[] buffer;
+        // std::replace( s.begin(), s.end(), 'x', 'y')
+        std::string date = dateStream.str();
+        std::replace(date.begin(), date.end(), ':', '_');
+        std::cout << '\"' << date << '\"' << std::endl;
+        std::string cmd = "ffmpeg -framerate 50 -i outputimgs/%07d.bmp -c:v libx264 -r 50 cpuOut" + date + ".mp4\0";
+        std::cout << '\"' << cmd << '\"' << std::endl;
+        int n = cmd.length();
+        char* cmdArr = new char[n];
+        for (int i = 0; i < n; i++) {
+            cmdArr[i] = cmd.at(i);
+        }
+        system(cmdArr);
+        free(cmdArr);
     }
 
     for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
@@ -184,6 +199,7 @@ int main()
     }
     free(allArrs);
     free(remainingObjs);
+
     return 0;
 }
 
