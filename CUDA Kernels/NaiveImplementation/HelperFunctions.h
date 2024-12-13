@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cmath>
+#include <time.h>
 
 //struct for color
 struct p_color
@@ -148,6 +149,40 @@ int string_to_int(std::string s)
 	int n = 0;
 	strm >> n;
 	return n;
+}
+
+//gets current date as string
+std::string current_dateTime() {
+	struct tm newtime;
+	__time64_t long_time;
+	char timebuf[128];
+	errno_t err;
+
+	// Get time as 64-bit integer.
+	_time64(&long_time);
+	// Convert to local time.
+	err = _localtime64_s(&newtime, &long_time);
+	if (err)
+	{
+		printf("Invalid argument to _localtime64_s.");
+		exit(1);
+	}
+	err =_strdate_s(timebuf, 128);
+	if (err)
+	{
+		printf("Invalid argument to _strdate_s.");
+		exit(1);
+	}
+	std::string output = timebuf;
+	err = _strtime_s(timebuf, 128);
+	if (err)
+	{
+		printf("Invalid argument to _strtime_s.");
+		exit(1);
+	}
+	output = output + timebuf;
+
+	return output;
 }
 
 //write a bmp header file

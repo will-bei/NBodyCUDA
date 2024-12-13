@@ -7,7 +7,6 @@
 #include <iostream>
 #include <chrono>
 #include <cmath>
-#include <ctime>
 #include <random>
 #include <string>
 #include "HelperFunctions.h"
@@ -180,12 +179,11 @@ int main()
         std::cout << "Output images generated." << std::endl;
         delete[] buffer;
 
-        std::time_t end_time = std::chrono::system_clock::to_time_t(end);
-        std::stringstream dateStream;
-        dateStream << std::put_time(std::localtime(&end_time), "%Y%m%d_%X");
-        // std::replace( s.begin(), s.end(), 'x', 'y')
-        std::string date = dateStream.str();
-        std::replace(date.begin(), date.end(), ':', '_');
+        std::string date = current_dateTime();
+        std::replace(date.begin(), date.end(), '/', '_');
+        for (int i = 0; i < date.length(); i++) {
+            if (date.at(i) == ':') date.erase(i, 1);
+        }
         std::cout << '\"' << date << '\"' << std::endl;
         std::string cmd = "ffmpeg -framerate 50 -i outputimgs/%07d.bmp -c:v libx264 -r 50 cpuOut" + date + ".mp4\0";
         std::cout << '\"' << cmd << '\"' << std::endl;
@@ -195,7 +193,7 @@ int main()
             cmdArr[i] = cmd.at(i);
         }
         system(cmdArr);
-        delete [] cmdArr;
+        delete[] cmdArr;
     }
 
     for (int i = 0; i < NUMBER_OF_CYCLES; i++) {

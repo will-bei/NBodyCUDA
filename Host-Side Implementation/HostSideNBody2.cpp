@@ -5,13 +5,14 @@
 #include <cmath>
 #include <ctime>
 #include <random>
+#include <time.h>
 #include "HelperFunctions.h"
 
 const unsigned int SEED_VALUE = 2024;
 const bool DRY_RUN = false;
 
 //number of cycles done for the simulation
-const int NUMBEROFCYCLES = 50000;
+const int NUMBEROFCYCLES = 1000;
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
 //all objects are randomly initialized with a mass between 10^22 kg to 10^24 kg
@@ -110,7 +111,7 @@ int main() {
 	std::ofstream myfile;
 	myfile.open("objectsData.txt");
 	std::cout << "Output data to objectsData.txt...\n";
-	/*for (int i = 0; i < NUMBEROFCYCLES; i++) {
+	for (int i = 0; i < NUMBEROFCYCLES; i++) {
 		for (int j = 0; j < remainingObjs[i]; j++) {
 			myfile << allArrs[i][j].getObjNumber();
 			myfile << " " << allArrs[i][j].getMass();
@@ -125,7 +126,7 @@ int main() {
 			myfile << " " << allArrs[i][j].getvy() << std::endl;
 		}
 	}
-	myfile.close();*/
+	myfile.close();
 
 	// draw frames if not a dry run
 	if (!DRY_RUN) {
@@ -148,13 +149,29 @@ int main() {
 				set_circle_values(thisObject, allArrs[i][j], px, pz);
 				fill_circle(buffer, px, pz, thisObject);
 			}
-			//create a frame for every 1000 cycle
-			if (i % 4 == 0) {
-				write_bmp_file(i / 4, buffer, px, pz);
+			//create a frame for every 2 cycle
+			if (i % 2 == 0) {
+				write_bmp_file(i / 2, buffer, px, pz);
 			}
 		}
 		std::cout << "Output images generated." << std::endl;
 		delete [] buffer;
+
+		std::string date = current_dateTime();
+		std::replace(date.begin(), date.end(), '/', '_');
+		for (int i = 0; i < date.length(); i++) {
+			if (date.at(i) == ':') date.erase(i, 1);
+		}
+		std::cout << '\"' << date << '\"' << std::endl;
+		std::string cmd = "ffmpeg -framerate 50 -i outputimgs/%07d.bmp -c:v libx264 -r 50 cpuOut" + date + ".mp4\0";
+		std::cout << '\"' << cmd << '\"' << std::endl;
+		int n = cmd.length();
+		char* cmdArr = new char[n];
+		for (int i = 0; i < n; i++) {
+			cmdArr[i] = cmd.at(i);
+		}
+		system(cmdArr);
+		delete [] cmdArr;
 	}
 
 	for (int i = 0; i < NUMBEROFCYCLES; i++) {
