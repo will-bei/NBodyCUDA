@@ -22,7 +22,7 @@ const bool DRY_RUN = false;
 cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px, int py, int stepsize, double& calculationTime);
 
 __device__ float CUDA_GRAV_CONST = 6.67e-11;
-
+/**
 extern __shared__ float3 shPosition[];
 
 __device__ float2 bodyBody(float3 pos1, float3 pos2, float2 accel) {
@@ -53,23 +53,39 @@ __device__ float2 tile_calculation(float3 pos, float2 accel) {
     }
     return accel;
 }
+**/
 
 __global__ void calculateSharedAcc(float3* pos, float2* out, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
+    extern __shared__ float3 shPosition[];
     float3* globalPos = (float3*)pos;
 
-    int i, tile;
+    int i, j, tile;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
     
     //operates tile by tile for optimization (may change logic this later on)
-    for (i = 0, tile = 0; i < size; i += TILE_WIDTH, tile++)
+    for (i = 0, tile = 0; i < size; i += 16, tile++) //originally pinned to tile size now changing it to 16 seems to speed things up
     {
         int idx = tile * blockDim.x + threadIdx.x;
         shPosition[threadIdx.x] = globalPos[idx];
         __syncthreads();
-        acc = tile_calculation(globalPos[idx], acc);
-        __syncthreads();
+
+        for (j = 0; j < blockDim.x; j++) {
+            float2 vec; //vector from current particle to its computational partner particle 
+            vec.x = pos[gtid].x - shPosition[j].x;
+            vec.y = pos[gtid].y - shPosition[j].y;
+            //distance squared calculation 
+            float sqrddist = vec.x * vec.x + vec.y * vec.y;
+
+            if (sqrddist > 0) {
+                //net_acc from this object 
+                float net_acc = -CUDA_GRAV_CONST * shPosition[j].z / sqrddist;
+                //increment acceleration 
+                acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
+                acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
+            }
+        }
     }
     out[gtid] = acc;
 }
