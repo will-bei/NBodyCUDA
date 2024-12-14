@@ -29,7 +29,7 @@ __global__ void calculateCorseAcc(float3* pos, float2* vel, float2* globalV, flo
     int i, j, tile, c;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
-    int COARSENING_FACTOR = 1; //HAS to be less than TILE_WIDTH
+    int COARSENING_FACTOR = 5; //HAS to be less than TILE_WIDTH
     globalV[gtid] = vel[gtid];
     globalPos[gtid].x = pos[gtid].x;
     globalPos[gtid].y = pos[gtid].y;
@@ -41,7 +41,7 @@ __global__ void calculateCorseAcc(float3* pos, float2* vel, float2* globalV, flo
         float2 currentV = globalV[gtid];
         __syncthreads();
 
-        for (j = 0; j < blockDim.x; j++) {
+        for (j = 0; j < size; j++) {
             float2 vec;
 
             //vector from current particle to its computational partner particle
@@ -66,7 +66,6 @@ __global__ void calculateCorseAcc(float3* pos, float2* vel, float2* globalV, flo
 
         currentPos.x += 0.5 * acc.x * stepsize * stepsize + stepsize * currentV.x;
         currentPos.y += 0.5 * acc.y * stepsize * stepsize + stepsize * currentV.y;
-        __syncthreads();
 
         globalV[gtid].x = currentV.x;
         globalV[gtid].y = currentV.y;
@@ -180,7 +179,7 @@ int main()
     allArrs[0] = new MassObject[numberOfObjects];
     int* remainingObjs = new int[NUMBER_OF_CYCLES];
     remainingObjs[0] = numberOfObjects;
-    init3(FIELDX, FIELDY, numberOfObjects, allArrs[0]);
+    init2(FIELDX, FIELDY, numberOfObjects, allArrs[0]);
 
     std::cout << "MassObjects initialized" << std::endl;
     std::cout << "Beginning simulation... " << std::endl;
