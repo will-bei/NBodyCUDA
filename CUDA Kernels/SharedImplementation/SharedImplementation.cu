@@ -214,27 +214,6 @@ int main()
     std::cout << "Simulation completed in " << elapsed_time.count() << " s\n";
     std::cout << "Time spent simulating: " << calculationTime << " s\n";
 
-    // write allArrs data into a text file
-    std::ofstream myfile;
-    myfile.open("objectsData.txt");
-    std::cout << "Output data to objectsData.txt...\n";
-    for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
-        for (int j = 0; j < remainingObjs[i]; j++) {
-            myfile << allArrs[i][j].getObjNumber();
-            myfile << " " << allArrs[i][j].getMass();
-
-            myfile << " " << allArrs[i][j].getPosition_x();
-            myfile << " " << allArrs[i][j].getPosition_y();
-
-            myfile << " " << allArrs[i][j].getax();
-            myfile << " " << allArrs[i][j].getay();
-
-            myfile << " " << allArrs[i][j].getvx();
-            myfile << " " << allArrs[i][j].getvy() << std::endl;
-        }
-    }
-    myfile.close();
-
     // draw frames if not a dry run
     if (!DRY_RUN) {
         //initialize output buffer
@@ -388,6 +367,15 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
 Error:
     calculationTime = sumTime.count();
+
+    // write allArrs data into a text file
+    std::ofstream myfile;
+    myfile.open("objectsData.txt");
+    std::cout << "Output data to objectsData.txt...\n";
+    for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
+        myfile << remainingObjs[i] << std::endl;
+    }
+    myfile.close();
 
     return cudaStatus;
 }
