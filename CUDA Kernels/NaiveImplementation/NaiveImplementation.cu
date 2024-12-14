@@ -12,7 +12,7 @@
 #include "HelperFunctions.h"
 #include "ErrorChecker.cuh"
 
-#define NUMBER_OF_CYCLES 1000
+#define NUMBER_OF_CYCLES 100000
 #define CYCLES_PER_IMAGE 2
 #define TILE_WIDTH 256
 
@@ -98,12 +98,55 @@ void init2(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
     }
 }
 
+//initialize objects in a three normal distribution, with different avg. initial velocities
+void init3(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
+    std::default_random_engine generator;
+    generator.seed(SEED_VALUE);
+    std::normal_distribution<float> distributionXl(fieldX / 3, fieldX / 8);
+    std::normal_distribution<float> distributionYl(fieldY / 3, fieldY / 8);
+    std::normal_distribution<float> distributionV1(-400, 50);
+    std::normal_distribution<float> distributionV2(400, 50);
+
+    for (int i = 0; i < numberOfObjects / 3; i++) {
+        float x = distributionXl(generator);
+        float y = distributionYl(generator);
+        float vx = distributionV2(generator);
+        float vy = distributionV1(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 21);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+
+    std::normal_distribution<float> distributionXb(fieldX / 2, fieldX / 6);
+    std::normal_distribution<float> distributionYb(3 * fieldY / 4, fieldY / 6);
+
+    for (int i = numberOfObjects / 3; i < 2 * numberOfObjects / 3; i++) {
+        float x = distributionXb(generator);
+        float y = distributionYb(generator);
+        float vx = distributionV2(generator);
+        float vy = distributionV2(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 20);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+
+    std::normal_distribution<float> distributionXr(2 * fieldX / 3, 2 * fieldX / 8);
+    std::normal_distribution<float> distributionYr(fieldY / 2, fieldY / 8);
+
+    for (int i = 2 * numberOfObjects / 3; i < numberOfObjects; i++) {
+        float x = distributionXr(generator);
+        float y = distributionYr(generator);
+        float vx = distributionV1(generator);
+        float vy = distributionV2(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 20);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+}
+
 int main()
 {
     srand(SEED_VALUE);
     int px = 800;
     int pz = 800;
-    int numberOfObjects = 1024;
+    int numberOfObjects = 32768;
     float stepsize = 7200;
     std::cout << "The frame width is " << px << "." << std::endl;
     std::cout << "The frame height is " << pz << "." << std::endl;
@@ -114,7 +157,7 @@ int main()
     allArrs[0] = (MassObject*)malloc(numberOfObjects * sizeof(MassObject));
     int* remainingObjs = (int*)malloc(NUMBER_OF_CYCLES * sizeof(int));
     remainingObjs[0] = numberOfObjects;
-    init2(FIELDX, FIELDY, numberOfObjects, allArrs[0]);
+    init3(FIELDX, FIELDY, numberOfObjects, allArrs[0]);
 
     std::cout << "MassObjects initialized" << std::endl;
     std::cout << "Beginning simulation... " << std::endl;
@@ -185,7 +228,7 @@ int main()
             if (date.at(i) == ':') date.erase(i, 1);
         }
         std::cout << '\"' << date << '\"' << std::endl;
-        std::string cmd = "ffmpeg -framerate 50 -i outputimgs/%07d.bmp -c:v libx264 -r 50 cpuOut" + date + ".mp4\0";
+        std::string cmd = "ffmpeg -framerate 50 -i outputimgs/%07d.bmp -c:v libx264 -r 50 cpuOut" + date + ".mp4";
         std::cout << '\"' << cmd << '\"' << std::endl;
         int n = cmd.length();
         char* cmdArr = new char[n];
