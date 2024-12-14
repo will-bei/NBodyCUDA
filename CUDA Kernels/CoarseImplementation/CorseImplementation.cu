@@ -23,35 +23,48 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
 __device__ float CUDA_GRAV_CONST = 6.67e-11;
 
-__global__ void calculateCorseAcc(float3* pos, float2* globalAcc, int size) {
+__global__ void calculateCorseAcc(float3* pos, float2* vel, float2* globalAcc, float2* globalV, float2* globalPos, int, stepsize, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
     int i, j, tile, c;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
     int COARSENING_FACTOR = 5; //HAS to be less than TILE_WIDTH
-    
+    globalV[gtid] = vel[gtid];
+    globalPos[gtid].x = pos[gtid].x;
+    globalPos[gtid].y = pos[gtid].y;
     //acceleration calculation
     for (c = 0; c < COARSENING_FACTOR; c++) //haha c++
     {
-
+        acc = { 0.0f, 0.0f };
+        float2 currentPos = globalPos[gtid];
         for (j = 0; j < blockDim.x; j++) {
             float2 vec;
 
             //vector from current particle to its computational partner particle
-            vec.x = pos[gtid].x - pos[j].x;
-            vec.y = pos[gtid].y - pos[j].y;
+            vec.x = currentPos.x - globalPos[j].x;
+            vec.y = currentPos.y - globalPos[j].y;
             //distance squared calculation
             float sqrddist = vec.x * vec.x + vec.y * vec.y;
 
             if (sqrddist > 0) {
                 //net_acc  from this object
-                float net_acc = -CUDA_GRAV_CONST * pos[j].z / sqrddist;
+                float net_acc = -CUDA_GRAV_CONST * globalPos[j].z / sqrddist;
 
                 //increment acceleration
                 acc.x += cosf(atan2f(vec.y, vec.x)) * net_acc;
                 acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
             }
         }
+    
+        // update velocity and position from this
+        float2 currentV = globalV[gtid];
+        currentV.x += acc.x*stepsize;
+        currentV.y += acc.y*stepsize;
+        globalV[gtid].x = currentV.x;
+        globalV[gtid].y = currentV.y;
+
+        globalPos[gtid].x += 0.5 * acc.x * stepsize * stepsize + stepsize * currentV.x;
+        globalPos[gtid].y += 0.5 * acc.y * stepsize * stepsize + stepsize * currentV.y;
     }
     globalAcc[gtid] = acc;
 }
