@@ -104,13 +104,14 @@ void init3(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
     generator.seed(SEED_VALUE);
     std::normal_distribution<float> distributionXl(fieldX / 3, fieldX / 8);
     std::normal_distribution<float> distributionYl(fieldY / 3, fieldY / 8);
-    std::normal_distribution<float> distributionV1(-400, 50);
-    std::normal_distribution<float> distributionV2(400, 50);
+    std::normal_distribution<float> distributionV1(200, 50);
+    std::normal_distribution<float> distributionV2(-200, 50);
+    std::normal_distribution<float> distributionV3(0, 100);
 
     for (int i = 0; i < numberOfObjects / 3; i++) {
         float x = distributionXl(generator);
         float y = distributionYl(generator);
-        float vx = distributionV2(generator);
+        float vx = distributionV3(generator);
         float vy = distributionV1(generator);
         float mass = (rand() % 100 + 1) * (float)pow(10, 21);
         *(arr + i) = MassObject(x, y, vx, vy, mass, i);
@@ -122,7 +123,7 @@ void init3(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
     for (int i = numberOfObjects / 3; i < 2 * numberOfObjects / 3; i++) {
         float x = distributionXb(generator);
         float y = distributionYb(generator);
-        float vx = distributionV2(generator);
+        float vx = distributionV3(generator);
         float vy = distributionV2(generator);
         float mass = (rand() % 100 + 1) * (float)pow(10, 20);
         *(arr + i) = MassObject(x, y, vx, vy, mass, i);
@@ -134,8 +135,8 @@ void init3(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
     for (int i = 2 * numberOfObjects / 3; i < numberOfObjects; i++) {
         float x = distributionXr(generator);
         float y = distributionYr(generator);
-        float vx = distributionV1(generator);
-        float vy = distributionV2(generator);
+        float vx = distributionV2(generator);
+        float vy = distributionV3(generator);
         float mass = (rand() % 100 + 1) * (float)pow(10, 20);
         *(arr + i) = MassObject(x, y, vx, vy, mass, i);
     }
