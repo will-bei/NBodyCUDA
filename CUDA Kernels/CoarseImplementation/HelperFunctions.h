@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cmath>
+#include <time.h>
 
 //struct for color
 struct p_color
@@ -69,7 +70,7 @@ public:
 	void changeAcceleration(float d_ax, float d_ay); //change the accelerations by d_ax and d_ay
 	void changeV(float vx_new, float vy_new); //sets the velocities of the object to the respective parameter values
 	void changePositionFromAcc(float stepsize); //changes the position of the object given a stepsize (i.e. change in time)
-	void changePositionFromCollision(float new_x, float new_y); //directly updates x and y position when a collision happens
+	void setPosition(float new_x, float new_y); //directly updates x and y position when a collision happens
 };
 MassObject::MassObject(float start_x, float start_y, float start_vx, float start_vy, float start_mass, int ob_no) {
 	x = start_x;
@@ -120,7 +121,7 @@ void MassObject::changeV(float vx_new, float vy_new) {
 	vx = vx_new;
 	vy = vy_new;
 }
-void MassObject::changePositionFromCollision(float new_x, float new_y) {
+void MassObject::setPosition(float new_x, float new_y) {
 	x = new_x;
 	y = new_y;
 }
@@ -148,6 +149,40 @@ int string_to_int(std::string s)
 	int n = 0;
 	strm >> n;
 	return n;
+}
+
+//gets current date as string
+std::string current_dateTime() {
+	struct tm newtime;
+	__time64_t long_time;
+	char timebuf[128];
+	errno_t err;
+
+	// Get time as 64-bit integer.
+	_time64(&long_time);
+	// Convert to local time.
+	err = _localtime64_s(&newtime, &long_time);
+	if (err)
+	{
+		printf("Invalid argument to _localtime64_s.");
+		exit(1);
+	}
+	err =_strdate_s(timebuf, 128);
+	if (err)
+	{
+		printf("Invalid argument to _strdate_s.");
+		exit(1);
+	}
+	std::string output = timebuf;
+	err = _strtime_s(timebuf, 128);
+	if (err)
+	{
+		printf("Invalid argument to _strtime_s.");
+		exit(1);
+	}
+	output = output + timebuf;
+
+	return output;
 }
 
 //write a bmp header file
@@ -408,7 +443,7 @@ MassObject* updateObjects(MassObject* A, MassObject* B) {
 	float new_x = m1 * A->getPosition_x() / (m1 + m2) + m2 * B->getPosition_x() / (m1 + m2);
 	float new_y = m1 * A->getPosition_y() / (m1 + m2) + m2 * B->getPosition_y() / (m1 + m2);
 	(*A).changeV(vx, vy);
-	(*A).changePositionFromCollision(new_x, new_y);
+	(*A).setPosition(new_x, new_y);
 	(*A).changeMass((*B).getMass());
 
 	return A;
