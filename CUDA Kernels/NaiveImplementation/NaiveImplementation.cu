@@ -147,7 +147,7 @@ int main()
     srand(SEED_VALUE);
     int px = 800;
     int pz = 800;
-    int numberOfObjects = 32768;
+    int numberOfObjects = 256;
     float stepsize = 7200;
     std::cout << "The frame width is " << px << "." << std::endl;
     std::cout << "The frame height is " << pz << "." << std::endl;
@@ -174,27 +174,6 @@ int main()
 
     std::cout << "Simulation completed in " << elapsed_time.count() << " s\n";
     std::cout << "Time spent simulating: " << calculationTime << " s\n";
-
-    // write allArrs data into a text file
-    std::ofstream myfile;
-    myfile.open("objectsData.txt");
-    std::cout << "Output data to objectsData.txt...\n";
-    for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
-        for (int j = 0; j < remainingObjs[i]; j++) {
-            myfile << allArrs[i][j].getObjNumber();
-            myfile << " " << allArrs[i][j].getMass();
-
-            myfile << " " << allArrs[i][j].getPosition_x();
-            myfile << " " << allArrs[i][j].getPosition_y();
-
-            myfile << " " << allArrs[i][j].getax();
-            myfile << " " << allArrs[i][j].getay();
-
-            myfile << " " << allArrs[i][j].getvx();
-            myfile << " " << allArrs[i][j].getvy() << std::endl;
-        }
-    }
-    myfile.close();
 
     // draw frames if not a dry run
     if (!DRY_RUN) {
@@ -278,7 +257,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         cudaFree(dev_accIn);
         goto Error;
     }
-
+    
     for (int i = 1; i < NUMBER_OF_CYCLES; i++) {
         // cudaCopy the ax, ay, and mass from objArray to dev_accIn
         float3* accIn = (float3*)malloc(remainingObjs[i - 1] * sizeof(float3));
@@ -353,7 +332,6 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         free(accIn);
         free(accOut);
     }
-
     // cudaDeviceReset( ) must be called in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
     cudaStatus = checkCuda(cudaDeviceReset());
@@ -366,6 +344,15 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
     
     Error:
     calculationTime = sumTime.count();
+
+    // write allArrs data into a text file
+    std::ofstream myfile;
+    myfile.open("objectsData.txt");
+    std::cout << "Output data to objectsData.txt...\n";
+    for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
+        myfile << remainingObjs[i] << std::endl;
+    }
+    myfile.close();
 
     return cudaStatus;
 }
