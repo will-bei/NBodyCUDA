@@ -2,12 +2,13 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <chrono>
 #include <cmath>
-#include <ctime>
 #include <random>
+#include <string>
 #include "HelperFunctions.h"
 #include "ErrorChecker.cuh"
 
@@ -23,23 +24,29 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
 
 __device__ float CUDA_GRAV_CONST = 6.67e-11;
 
-__global__ void calculateCorseAcc(float3* pos, float2* globalAcc, int size) {
+__global__ void calculateCorseAcc(float3* pos, float2* vel, float2* globalV, float2* globalPos, int stepsize, int size) {
     //x and y are the 2D positions and z is the weight of the particle  
     int i, j, tile, c;
     float2 acc = { 0.0f, 0.0f };
     int gtid = blockIdx.x * blockDim.x + threadIdx.x;
     int COARSENING_FACTOR = 5; //HAS to be less than TILE_WIDTH
-    
+    globalV[gtid] = vel[gtid];
+    globalPos[gtid].x = pos[gtid].x;
+    globalPos[gtid].y = pos[gtid].y;
     //acceleration calculation
     for (c = 0; c < COARSENING_FACTOR; c++) //haha c++
     {
+        acc = { 0.0f, 0.0f };
+        float2 currentPos = globalPos[gtid];
+        float2 currentV = globalV[gtid];
+        __syncthreads();
 
-        for (j = 0; j < blockDim.x; j++) {
+        for (j = 0; j < size; j++) {
             float2 vec;
 
             //vector from current particle to its computational partner particle
-            vec.x = pos[gtid].x - pos[j].x;
-            vec.y = pos[gtid].y - pos[j].y;
+            vec.x = currentPos.x - globalPos[j].x;
+            vec.y = currentPos.y - globalPos[j].y;
             //distance squared calculation
             float sqrddist = vec.x * vec.x + vec.y * vec.y;
 
@@ -52,8 +59,19 @@ __global__ void calculateCorseAcc(float3* pos, float2* globalAcc, int size) {
                 acc.y += sinf(atan2f(vec.y, vec.x)) * net_acc;
             }
         }
+    
+        // update velocity and position from this
+        currentV.x += acc.x*stepsize;
+        currentV.y += acc.y*stepsize;
+
+        currentPos.x += 0.5 * acc.x * stepsize * stepsize + stepsize * currentV.x;
+        currentPos.y += 0.5 * acc.y * stepsize * stepsize + stepsize * currentV.y;
+
+        globalV[gtid].x = currentV.x;
+        globalV[gtid].y = currentV.y;
+        globalPos[gtid].x = currentPos.x;
+        globalPos[gtid].y = currentPos.y;
     }
-    globalAcc[gtid] = acc;
 }
 
 //semi-randomly initialize the MassObjects given the field size and the number of objects
@@ -98,6 +116,49 @@ void init2(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
         float vx = distributionV(generator);
         float vy = distributionV(generator);
         float mass = (rand() % 100 + 1) * (float)pow(10, 22);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+}
+
+//initialize objects in a three normal distribution, with different avg. initial velocities
+void init3(float fieldX, float fieldY, int numberOfObjects, MassObject* arr) {
+    std::default_random_engine generator;
+    generator.seed(SEED_VALUE);
+    std::normal_distribution<float> distributionXl(fieldX / 3, fieldX / 8);
+    std::normal_distribution<float> distributionYl(fieldY / 3, fieldY / 8);
+    std::normal_distribution<float> distributionV1(-400, 50);
+    std::normal_distribution<float> distributionV2(400, 50);
+
+    for (int i = 0; i < numberOfObjects / 3; i++) {
+        float x = distributionXl(generator);
+        float y = distributionYl(generator);
+        float vx = distributionV2(generator);
+        float vy = distributionV1(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 21);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+
+    std::normal_distribution<float> distributionXb(fieldX / 2, fieldX / 6);
+    std::normal_distribution<float> distributionYb(3 * fieldY / 4, fieldY / 6);
+
+    for (int i = numberOfObjects / 3; i < 2 * numberOfObjects / 3; i++) {
+        float x = distributionXb(generator);
+        float y = distributionYb(generator);
+        float vx = distributionV2(generator);
+        float vy = distributionV2(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 20);
+        *(arr + i) = MassObject(x, y, vx, vy, mass, i);
+    }
+
+    std::normal_distribution<float> distributionXr(2 * fieldX / 3, 2 * fieldX / 8);
+    std::normal_distribution<float> distributionYr(fieldY / 2, fieldY / 8);
+
+    for (int i = 2 * numberOfObjects / 3; i < numberOfObjects; i++) {
+        float x = distributionXr(generator);
+        float y = distributionYr(generator);
+        float vx = distributionV1(generator);
+        float vy = distributionV2(generator);
+        float mass = (rand() % 100 + 1) * (float)pow(10, 20);
         *(arr + i) = MassObject(x, y, vx, vy, mass, i);
     }
 }
@@ -182,6 +243,22 @@ int main()
         }
         std::cout << "Output images generated." << std::endl;
         delete[] buffer;
+
+        std::string date = current_dateTime();
+        std::replace(date.begin(), date.end(), '/', '_');
+        for (int i = 0; i < date.length(); i++) {
+            if (date.at(i) == ':') date.erase(i, 1);
+        }
+        std::cout << '\"' << date << '\"' << std::endl;
+        std::string cmd = "ffmpeg -framerate 50 -i outputimgs/%07d.bmp -c:v libx264 -r 50 cpuOut" + date + ".mp4";
+        std::cout << '\"' << cmd << '\"' << std::endl;
+        int n = cmd.length();
+        char* cmdArr = new char[n];
+        for (int i = 0; i < n; i++) {
+            cmdArr[i] = cmd.at(i);
+        }
+        system(cmdArr);
+        delete[] cmdArr;
     }
 
     for (int i = 0; i < NUMBER_OF_CYCLES; i++) {
@@ -208,41 +285,77 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
     
     // initialize device pointers
     float3* dev_accIn;
-    float2* dev_accOut;
+    float2* dev_velIn;
+    float2* dev_velOut;
+    float2* dev_posOut;
+
     cudaStatus = checkCuda(cudaMalloc((void**)&dev_accIn, remainingObjs[0] * sizeof(float3)));
     if (cudaStatus != cudaSuccess) {
         fprintf(stdout, "cudaMalloc failed!");
         goto Error;
     }
 
-    cudaStatus = checkCuda(cudaMalloc((void**)&dev_accOut, remainingObjs[0] * sizeof(float3)));
+    cudaStatus = checkCuda(cudaMalloc((void**)&dev_velIn, remainingObjs[0] * sizeof(float2)));
     if (cudaStatus != cudaSuccess) {
         fprintf(stdout, "cudaMalloc failed!");
         cudaFree(dev_accIn);
         goto Error;
     }
 
+    cudaStatus = checkCuda(cudaMalloc((void**)&dev_velOut, remainingObjs[0] * sizeof(float2)));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stdout, "cudaMalloc failed!");
+        cudaFree(dev_accIn);
+        cudaFree(dev_velIn);
+        goto Error;
+    }
+
+    cudaStatus = checkCuda(cudaMalloc((void**)&dev_posOut, remainingObjs[0] * sizeof(float2)));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stdout, "cudaMalloc failed!");
+        cudaFree(dev_accIn);
+        cudaFree(dev_velIn);
+        cudaFree(dev_posOut);
+        goto Error;
+    }
+
     for (int i = 1; i < NUMBER_OF_CYCLES; i++) {
-        // cudaCopy the ax, ay, and mass from objArray to dev_accIn
+        // cudaCopy the ax, ay, and mass from objArray to dev_accIn; and velocities to dev_velIn
         float3* accIn = (float3*)malloc(remainingObjs[i - 1] * sizeof(float3));
+        float2* velIn = (float2*)malloc(remainingObjs[i - 1] * sizeof(float2));
         for (int j = 0; j < remainingObjs[i - 1]; j++) {
             accIn[j].x = allArrs[i - 1][j].getPosition_x();
             accIn[j].y = allArrs[i - 1][j].getPosition_y();
             accIn[j].z = allArrs[i - 1][j].getMass();
+            velIn[j].x = allArrs[i - 1][j].getvx();
+            velIn[j].y = allArrs[i - 1][j].getvy();
         }
         
         cudaStatus = checkCuda(cudaMemcpy(dev_accIn, accIn, remainingObjs[i - 1] * sizeof(float3), cudaMemcpyHostToDevice));
         if (cudaStatus != cudaSuccess) {
             fprintf(stdout, "cudaMemcpy failed!");
-            checkCuda(cudaFree(dev_accIn));
-            checkCuda(cudaFree(dev_accOut));
+            cudaFree(dev_accIn);
+            cudaFree(dev_velIn);
+            cudaFree(dev_posOut);
+            cudaFree(dev_velOut);
+            goto Error;
+        }
+
+        cudaStatus = checkCuda(cudaMemcpy(dev_velIn, velIn, remainingObjs[i - 1] * sizeof(float2), cudaMemcpyHostToDevice));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stdout, "cudaMemcpy failed!");
+            cudaFree(dev_accIn);
+            cudaFree(dev_velIn);
+            cudaFree(dev_posOut);
+            cudaFree(dev_velOut);
             goto Error;
         }
 
         dim3 threadsPerBlock(TILE_WIDTH);
         dim3 blocks(1 + remainingObjs[i - 1] / TILE_WIDTH);
         start = std::chrono::system_clock::now();
-        calculateCorseAcc << <threadsPerBlock, blocks >> > (dev_accIn, dev_accOut, remainingObjs[i - 1]);
+        // calculateCorseAcc(float3* pos, float2* vel, float2* globalAcc, float2* globalV, float2* globalPos, int stepsize, int size)
+        calculateCorseAcc<<<threadsPerBlock, blocks>>>(dev_accIn, dev_velIn, dev_velOut, dev_posOut, stepsize, remainingObjs[i - 1]);
         end = std::chrono::system_clock::now();
         sumTime += end - start;
 
@@ -250,8 +363,10 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         cudaStatus = checkCuda(cudaGetLastError());
         if (cudaStatus != cudaSuccess) {
             fprintf(stdout, "kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-            checkCuda(cudaFree(dev_accIn));
-            checkCuda(cudaFree(dev_accOut));
+            cudaFree(dev_accIn);
+            cudaFree(dev_velIn);
+            cudaFree(dev_posOut);
+            cudaFree(dev_velOut);
             goto Error;
         }
 
@@ -260,20 +375,36 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         cudaStatus = checkCuda(cudaDeviceSynchronize());
         if (cudaStatus != cudaSuccess) {
             fprintf(stdout, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-            checkCuda(cudaFree(dev_accIn));
-            checkCuda(cudaFree(dev_accOut));
+            cudaFree(dev_accIn);
+            cudaFree(dev_velIn);
+            cudaFree(dev_posOut);
+            cudaFree(dev_velOut);
             goto Error;
         }
 
         // retrieve result data from device back to host
-        float2* accOut = (float2*)malloc(remainingObjs[i - 1] * sizeof(float2));
-        cudaStatus = checkCuda(cudaMemcpy(accOut, dev_accOut, remainingObjs[i - 1] * sizeof(float2), cudaMemcpyDeviceToHost));
+        float2* vOut = (float2*)malloc(remainingObjs[i - 1] * sizeof(float2));
+        cudaStatus = checkCuda(cudaMemcpy(vOut, dev_velOut, remainingObjs[i - 1] * sizeof(float2), cudaMemcpyDeviceToHost));
         if (cudaStatus != cudaSuccess) {
             fprintf(stdout, "cudaMemcpy failed!");
-            checkCuda(cudaFree(dev_accIn));
-            checkCuda(cudaFree(dev_accOut));
+            cudaFree(dev_accIn);
+            cudaFree(dev_velIn);
+            cudaFree(dev_posOut);
+            cudaFree(dev_velOut);
             free(accIn);
-            free(accOut);
+            goto Error;
+        }
+
+        float2* posOut = (float2*)malloc(remainingObjs[i - 1] * sizeof(float2));
+        cudaStatus = checkCuda(cudaMemcpy(posOut, dev_posOut, remainingObjs[i - 1] * sizeof(float2), cudaMemcpyDeviceToHost));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stdout, "cudaMemcpy failed!");
+            cudaFree(dev_accIn);
+            cudaFree(dev_velIn);
+            cudaFree(dev_posOut);
+            cudaFree(dev_velOut);
+            free(accIn);
+            free(vOut);
             goto Error;
         }
 
@@ -281,8 +412,10 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         // init current iteration
         allArrs[i] = new MassObject[remainingObjs[i - 1]];
         for (int j = 0; j < remainingObjs[i - 1]; j++) {
-            allArrs[i][j].setAcceleration(accOut[j].x, accOut[j].y);
-            allArrs[i][j].changePositionFromAcc(stepsize);
+            MassObject currentObj = allArrs[i - 1][j];
+            currentObj.changeV(vOut[j].x, vOut[j].y);
+            currentObj.setPosition(posOut[j].x, posOut[j].y);
+            allArrs[i][j] = currentObj;
         }
 
         // Check for collisions and update arr contents
@@ -290,7 +423,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
         remainingObjs[i] = check_collisions(allArrs[i], remainingObjs[i - 1], px, pz);
 
         free(accIn);
-        free(accOut);
+        free(posOut);
     }
 
     // cudaDeviceReset( ) must be called in order for profiling and
@@ -299,7 +432,7 @@ cudaError_t nbodyHelperFunction(MassObject** allArrs, int* remainingObjs, int px
     if (cudaStatus != cudaSuccess) {
         fprintf(stdout, "cudaDeviceReset failed!");
         checkCuda(cudaFree(dev_accIn));
-        checkCuda(cudaFree(dev_accOut));
+        checkCuda(cudaFree(dev_posOut));
         goto Error;
     }
     
